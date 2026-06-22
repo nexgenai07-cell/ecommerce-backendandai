@@ -17,7 +17,11 @@ class Store(models.Model):
                     related_name='stores',
                  )
     name       = models.CharField(max_length=255)
-    logo       = models.CharField(max_length=500, blank=True, null=True)
+    logo = models.ImageField(
+    upload_to='store_logos/',
+    blank=True,
+    null=True
+                 )
     subdomain  = models.CharField(max_length=100, unique=True)
     phone      = models.CharField(max_length=20, blank=True, null=True)
     address    = models.TextField(blank=True, null=True)

@@ -178,17 +178,11 @@ CORS_ALLOWED_ORIGINS = [
 # CHANNELS (Redis)
 # -------------------------------------------------
 
+import os
+
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {
-            "hosts": [
-                os.getenv(
-                    "REDIS_URL",
-                    "rediss://localhost:6379/0"
-                )
-            ],
-        },
+        "BACKEND": "channels.layers.InMemoryChannelLayer",
     },
 }
 
