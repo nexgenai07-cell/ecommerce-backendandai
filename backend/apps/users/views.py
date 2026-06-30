@@ -74,7 +74,7 @@ def send_verification_email(user):
         message=f'Click the link to verify your email: {verify_link}\n\nThis link is valid for 24 hours.',
         from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
         recipient_list=[user.email],
-        fail_silently=True,  # registration/resend should never crash because email sending failed
+        fail_silently=False,  # TEMP: False taake Vercel logs mein asal error dikhe (debugging)
     )
 
 
@@ -187,7 +187,7 @@ class PasswordResetRequestView(APIView):
             message=f'Click the link to reset your password: {reset_link}\n\nThis link is valid for 24 hours.',
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@example.com'),
             recipient_list=[email],
-            fail_silently=True,
+            fail_silently=False,  # TEMP: False taake Vercel logs mein asal error dikhe (debugging)
         )
 
         return Response(
