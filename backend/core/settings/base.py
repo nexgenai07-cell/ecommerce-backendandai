@@ -28,7 +28,25 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']
 
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+# -------------------------------------------------
+# EMAIL
+# Real email bhejne ke liye SMTP backend (Gmail). Agar EMAIL_HOST_USER
+# set nahi hai (local development mein), to console backend use hoga —
+# taake local testing ke waqt inbox spam na ho.
+# -------------------------------------------------
+
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+
+if EMAIL_HOST_USER:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+    EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+    EMAIL_USE_TLS = True
+    EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')  # Gmail App Password (16-digit)
+    DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER)
+else:
+    # fallback — local dev mein email terminal pe print hogi
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # -------------------------------------------------
 # APPS
