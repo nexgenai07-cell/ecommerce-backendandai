@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from core.pagination import StandardResultsSetPagination
 
 from .models import Customer, Order, OrderItem, Payment
 from .serializers import (
@@ -129,13 +130,16 @@ class CheckoutView(APIView):
 
 
 class OrderListView(generics.ListAPIView):
-    """GET /api/v1/orders/ — customer's own orders only"""
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        return Order.objects.filter(customer__user=self.request.user).order_by('-created_at')
-
+        return (
+            Order.objects
+            .filter(customer__user=self.request.user)
+            .order_by("-created_at")
+        )
 
 class OrderDetailView(generics.RetrieveAPIView):
     """GET /api/v1/orders/{order_number}/"""
@@ -203,12 +207,12 @@ class OrderTrackView(APIView):
 # ============================================================
 
 class AdminOrderListView(generics.ListAPIView):
-    """GET /api/v1/admin/orders/ — all orders (admin only)"""
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        return Order.objects.all().order_by('-created_at')
+        return Order.objects.all().order_by("-created_at")    return Order.objects.all().order_by('-created_at')
 
 
 class AdminOrderStatusUpdateView(APIView):
