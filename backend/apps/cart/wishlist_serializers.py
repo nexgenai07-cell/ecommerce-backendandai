@@ -5,19 +5,39 @@ from .models import Wishlist, WishlistItem
 from apps.products.models import Product
 
 
+class WishlistProductSerializer(serializers.ModelSerializer):
+    primary_image = serializers.SerializerMethodField()
+    in_stock = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "name",
+            "price",
+            "primary_image",
+            "in_stock",
+            "stock",
+            "category",
+        ]
+
+    def get_primary_image(self, obj):
+        image = obj.primary_image
+        if image and image.image:
+            return image.image.url
+        return None
+
+
 class WishlistItemSerializer(serializers.ModelSerializer):
-    product_name = serializers.CharField(source='product.name', read_only=True)
-    product_price = serializers.DecimalField(source='product.price', max_digits=10, decimal_places=2, read_only=True)
-    product_image = serializers.SerializerMethodField()
-    product_in_stock = serializers.BooleanField(source='product.in_stock', read_only=True)
+    product = WishlistProductSerializer(read_only=True)
 
     class Meta:
         model = WishlistItem
-        fields = ['id', 'product', 'product_name', 'product_price', 'product_image', 'product_in_stock', 'created_at']
-
-    def get_product_image(self, obj):
-        img = obj.product.primary_image
-        return img.image_url if img else None
+        fields = [
+            "id",
+            "product",
+            "created_at",
+        ]
 
 
 class WishlistSerializer(serializers.ModelSerializer):
@@ -25,7 +45,11 @@ class WishlistSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Wishlist
-        fields = ['id', 'items', 'created_at']
+        fields = [
+            "id",
+            "items",
+            "created_at",
+        ]
 
 
 class AddToWishlistSerializer(serializers.Serializer):
@@ -33,5 +57,5 @@ class AddToWishlistSerializer(serializers.Serializer):
 
     def validate_product_id(self, value):
         if not Product.objects.filter(id=value, is_active=True).exists():
-            raise serializers.ValidationError('Product not found.')
+            raise serializers.ValidationError("Product not found.")
         return value

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import Customer, Order, OrderItem, Payment
-
+from apps.returns.models import Return, Complaint
 
 @admin.register(Customer)
 class CustomerAdmin(admin.ModelAdmin):
@@ -62,3 +62,31 @@ class PaymentAdmin(admin.ModelAdmin):
         'amount',
         'created_at',
     ]
+    
+    
+@admin.register(Return)
+class ReturnAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "customer",
+        "status",
+        "created_at",
+    )
+
+    list_filter = ("status", "created_at")
+    search_fields = ("order__order_number", "customer__name")
+    
+@admin.register(Complaint)
+class ComplaintAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "order",
+        "customer",
+        "type",
+        "status",
+        "created_at",
+    )
+
+    list_filter = ("type", "status", "created_at")
+    search_fields = ("order__order_number", "customer__name")
