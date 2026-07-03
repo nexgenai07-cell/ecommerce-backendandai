@@ -8,7 +8,7 @@ from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from core.pagination import StandardResultsSetPagination
+from core.pagination import StandardResultsPagination
 from apps.notifications.utils import create_notification
 
 from .models import Customer, Order, OrderItem, Payment
@@ -175,7 +175,7 @@ class CheckoutView(APIView):
 class OrderListView(generics.ListAPIView):
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = StandardResultsPagination
 
     def get_queryset(self):
         return (
@@ -275,7 +275,7 @@ class AdminOrderListView(generics.ListAPIView):
     """GET /api/v1/admin/orders/"""
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = StandardResultsPagination
 
     def get_queryset(self):
         return Order.objects.all().order_by("-created_at")
@@ -365,7 +365,7 @@ class AdminOrderFilterView(generics.ListAPIView):
     """
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    pagination_class = StandardResultsSetPagination
+    pagination_class = StandardResultsPagination
 
     def get_queryset(self):
         qs = Order.objects.all().order_by("-created_at")
