@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from apps.users.permissions import IsAdmin
 from .models import SocialAccount, SocialPost, SocialPostAnalytics
 from .serializers import SocialAccountSerializer, SocialPostSerializer, SocialPostCreateSerializer
-
+from apps.notifications.utils import create_notification
 
 class SocialPostViewSet(viewsets.ModelViewSet):
     """
