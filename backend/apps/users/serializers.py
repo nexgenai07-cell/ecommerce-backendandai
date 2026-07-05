@@ -64,13 +64,34 @@ class LoginSerializer(serializers.Serializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     """Used for GET /me/ and PUT /me/update/"""
 
+    two_factor_enabled = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ['id', 'name', 'email', 'phone', 'role', 'email_verified', 'created_at']
-        read_only_fields = ['id', 'email', 'role', 'email_verified', 'created_at']
-        # email and role cannot be changed by the user themselves;
-        # email_verified can only flip via the verify-email/ endpoint
+        fields = [
+            'id',
+            'name',
+            'email',
+            'phone',
+            'role',
+            'email_verified',
+            'two_factor_enabled',
+            'created_at',
+        ]
+        read_only_fields = [
+            'id',
+            'email',
+            'role',
+            'email_verified',
+            'two_factor_enabled',
+            'created_at',
+        ]
 
+    def get_two_factor_enabled(self, obj):
+        try:
+            return obj.two_factor.is_enabled
+        except:
+            return False
 
 class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField()
