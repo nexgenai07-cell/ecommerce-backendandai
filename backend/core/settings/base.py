@@ -23,9 +23,11 @@ load_dotenv()
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'unsafe-default-key-change-me')
 
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [ "localhost",
+    "127.0.0.1",
+    ".vercel.app",]
 
 # Stripe configuration
 # STRIPE_WEBHOOK_SECRET will be updated after setting up Stripe CLI/webhook.
