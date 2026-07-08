@@ -1,42 +1,12 @@
-from django import forms
-from django.urls import reverse
-from django.utils.html import format_html
+# PATH: apps/products/admin.py
+
 from django.contrib import admin
 from .models import Product, ProductImage, ProductHistory, Discount, ProductDiscount, ProductStats
 
 
-class ProductImageInlineForm(forms.ModelForm):
-    image_upload = forms.ImageField(required=False, label='Upload Image')
-
-    class Meta:
-        model = ProductImage
-        fields = ['is_primary']
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        upload = self.cleaned_data.get('image_upload')
-        if upload:
-            instance.image_data = upload.read()
-            instance.image_name = upload.name
-            instance.image_content_type = upload.content_type
-        if commit:
-            instance.save()
-        return instance
-
-
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
-    form = ProductImageInlineForm
     extra = 1
-    fields = ['image_preview', 'image_upload', 'is_primary']
-    readonly_fields = ['image_preview']
-
-    def image_preview(self, obj):
-        if obj.pk and obj.image_data:
-            url = reverse('product-image', args=[obj.pk])
-            return format_html('<img src="{}" style="max-height:80px;"/>', url)
-        return "(no image yet)"
-    image_preview.short_description = "Preview"
 
 
 @admin.register(Product)
