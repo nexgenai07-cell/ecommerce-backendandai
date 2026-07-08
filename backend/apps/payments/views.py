@@ -85,8 +85,7 @@ class StripeWebhookView(APIView):
         if event["type"] == "payment_intent.succeeded":
             intent = event["data"]["object"]
 
-            order_number = intent["metadata"].get("order_number")
-            
+            order_number = intent["metadata"]["order_number"]            
             try:
                 order = Order.objects.get(order_number=order_number)
 
