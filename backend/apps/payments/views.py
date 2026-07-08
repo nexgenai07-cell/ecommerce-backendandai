@@ -86,7 +86,7 @@ class StripeWebhookView(APIView):
             intent = event["data"]["object"]
 
             order_number = intent["metadata"].get("order_number")
-
+            
             try:
                 order = Order.objects.get(order_number=order_number)
 
