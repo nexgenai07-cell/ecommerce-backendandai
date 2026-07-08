@@ -17,6 +17,23 @@ from apps.users.permissions import IsAdmin
 from core.pagination import StandardResultsPagination
 
 
+
+from django.http import HttpResponse, Http404
+from .models import ProductImage
+
+def serve_product_image(request, pk):
+    try:
+        img = ProductImage.objects.get(pk=pk)
+    except ProductImage.DoesNotExist:
+        raise Http404("Image not found")
+
+    if not img.image_data:
+        raise Http404("No image data")
+
+    return HttpResponse(img.image_data, content_type=img.image_content_type or "image/jpeg")
+
+
+
 class ProductViewSet(viewsets.ModelViewSet):
     """
     GET    /api/v1/products/             -> list (anyone)

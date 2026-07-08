@@ -1,5 +1,6 @@
 # PATH: apps/products/serializers.py
 
+from django.utils import timezone
 from rest_framework import serializers
 from .models import Product, ProductImage, ProductHistory
 
@@ -10,10 +11,20 @@ class CategorySerializer(serializers.Serializer):
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = ProductImage
-        fields = ["id", "image", "is_primary", "created_at"]
+        fields = ["id", "image_url", "is_primary", "created_at"]
 
+    def get_image_url(self, obj):
+        request = self.context.get("request")
+        if not obj.image_data:
+            return None
+        from django.urls import reverse
+        url = reverse('product-image', args=[obj.pk])
+        return request.build_absolute_uri(url) if request else url
+    
 
 class ProductListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for product listing pages"""
@@ -113,22 +124,25 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
 
     def validate_sku(self, value):
         qs = Product.objects.filter(sku=value)
-
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
-
         if qs.exists():
             raise serializers.ValidationError(
                 "A product with this SKU already exists."
             )
-
         return value
 
+    # Is wale function ko update karna hai:
     def create(self, validated_data):
         request = self.context["request"]
         validated_data["store"] = request.user.stores.first()
-        return super().create(validated_data)
 
+        # Agar request mein publish_at nahi aaya, to current time set kar do
+        if not validated_data.get("publish_at"):
+            validated_data["publish_at"] = timezone.now()
+
+        return super().create(validated_data)
+    
 
 class ProductHistorySerializer(serializers.ModelSerializer):
     changed_by_name = serializers.CharField(

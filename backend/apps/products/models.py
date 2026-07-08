@@ -37,18 +37,19 @@ class Product(models.Model):
 
 
 class ProductImage(models.Model):
-    product    = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
-    image      = models.ImageField(upload_to='products/', null=True, blank=True)
-    is_primary = models.BooleanField(default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
+    product            = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images')
+    image_data         = models.BinaryField(null=True, blank=True)
+    image_name         = models.CharField(max_length=255, null=True, blank=True)
+    image_content_type = models.CharField(max_length=100, null=True, blank=True)
+    is_primary         = models.BooleanField(default=False)
+    created_at         = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         db_table = 'product_images'
 
     def __str__(self):
         return f'Image for {self.product.name}'
-
-
+    
 class ProductHistory(models.Model):
     product    = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='history')
     changed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)

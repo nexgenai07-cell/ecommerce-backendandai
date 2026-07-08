@@ -28,3 +28,15 @@ class CategoryViewSet(viewsets.ModelViewSet):
         if self.action in ["list", "retrieve"]:
             return [permissions.AllowAny()]
         return [permissions.IsAuthenticated(), IsAdmin()]
+    
+
+    def perform_create(self, serializer):
+        # Doc ke mutabik request body se kuch nahi lena.
+        # Login admin user ke custom relation 'stores' se automatic active store uthana hai.
+        user_store = self.request.user.stores.first() 
+        
+        if user_store:
+            serializer.save(store=user_store)
+        else:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({"detail": "This admin user is not associated with any store in the database."})
