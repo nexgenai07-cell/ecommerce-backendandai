@@ -31,7 +31,10 @@ class CreateReturnView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if Return.objects.filter(order=order).exists():
+        if Return.objects.filter(
+               order=order,
+               status__in=["pending", "approved"]
+            ).exists():
             return Response({'error': 'A return request already exists for this order.'}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer = CreateReturnSerializer(data=request.data)

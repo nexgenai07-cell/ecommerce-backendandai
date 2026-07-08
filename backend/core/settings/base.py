@@ -5,7 +5,6 @@ Django base settings — shared across development and production.
 from pathlib import Path
 from datetime import timedelta
 import os
-import tempfile
 import dj_database_url
 from dotenv import load_dotenv
 
@@ -23,9 +22,17 @@ load_dotenv()
 
 SECRET_KEY = os.getenv('SECRET_KEY', 'unsafe-default-key-change-me')
 
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = [ "localhost",
+    "127.0.0.1",
+    ".vercel.app",]
+
+# Stripe configuration
+# STRIPE_WEBHOOK_SECRET will be updated after setting up Stripe CLI/webhook.
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
+STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
 # -------------------------------------------------
 # EMAIL
@@ -79,6 +86,7 @@ INSTALLED_APPS = [
     'apps.ai',
     'apps.social',
     'apps.whatsapp',
+    "apps.payments",
 ]
 
 # -------------------------------------------------
@@ -239,14 +247,7 @@ STATICFILES_STORAGE = (
 )
 
 MEDIA_URL = "/media/"
-
-# Local -> backend/media
-# Vercel -> temporary writable directory
-if os.getenv("VERCEL"):
-    MEDIA_ROOT = os.path.join(tempfile.gettempdir(), "media")
-else:
-    MEDIA_ROOT = BASE_DIR / "media"
-
+MEDIA_ROOT = BASE_DIR / "media"
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # -------------------------------------------------

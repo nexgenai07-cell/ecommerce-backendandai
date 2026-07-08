@@ -2,10 +2,15 @@
 
 from django.urls import path
 from .views import (
-    CheckoutView, OrderListView, OrderDetailView,
-    OrderCancelView, OrderTrackView,
-    AdminOrderListView, AdminOrderStatusUpdateView, AdminOrderFilterView,
-)
+    CheckoutView,
+    OrderListView,
+    OrderDetailView,
+    OrderCancelView,
+    OrderTrackView,
+    AdminOrderListView,
+    AdminOrderStatusUpdateView,
+    AdminOrderFilterView,
+    )
 from .return_views import (
     CreateReturnView, ReturnListView, ReturnDetailView, AdminReturnStatusUpdateView,
 )

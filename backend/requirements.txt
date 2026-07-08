@@ -6,10 +6,12 @@ channels_redis==4.3.0
 charset-normalizer==3.4.7
 colorama==0.4.6
 cryptography==49.0.0
+dj-database-url==3.1.2
 Django==6.0.6
 django-cors-headers==4.9.0
 djangorestframework==3.17.1
 djangorestframework_simplejwt==5.5.1
+gunicorn==21.2.0
 idna==3.18
 msgpack==1.2.1
 packaging==26.2
@@ -23,6 +25,7 @@ qrcode==8.2
 redis==8.0.1
 requests==2.34.2
 sqlparse==0.5.5
+stripe==15.3.0
 typing_extensions==4.15.0
 tzdata==2026.2
 ua-parser==1.0.2
@@ -30,5 +33,3 @@ ua-parser-builtins==202606
 urllib3==2.7.0
 user-agents==2.2.0
 whitenoise==6.12.0
-gunicorn==21.2.0
-dj-database-url==3.0.1

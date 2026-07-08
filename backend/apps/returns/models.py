@@ -1,5 +1,5 @@
 # PATH: apps/returns/models.py
-
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.conf import settings
 
@@ -147,9 +147,20 @@ class Complaint(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
-        db_table = "complaints"
-        ordering = ["-created_at"]
+class Meta:
+    db_table = "complaints"
+    ordering = ["-created_at"]
 
-    def __str__(self):
-        return f"Complaint by {self.customer.name} [{self.status}]"
+def clean(self):
+    if self.order and self.customer:
+        if self.order.customer_id != self.customer_id:
+            raise ValidationError(
+                "Selected order does not belong to this customer."
+            )
+
+def save(self, *args, **kwargs):
+    self.full_clean()
+    super().save(*args, **kwargs)
+
+def __str__(self):
+    return f"Complaint by {self.customer.name} [{self.status}]"
