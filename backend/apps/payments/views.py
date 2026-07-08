@@ -11,20 +11,19 @@ stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
 class CreatePaymentIntentView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
-        order_id = request.data.get("order_id")
+        order_number = request.data.get("order_number")
 
-        if not order_id:
+        if not order_number:
             return Response(
-                {"error": "order_id is required"},
+                {"error": "order_number is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
             order = Order.objects.get(
-                id=order_id,
+                order_number=order_number,
                 customer__user=request.user,
             )
         except Order.DoesNotExist:
@@ -32,20 +31,3 @@ class CreatePaymentIntentView(APIView):
                 {"error": "Order not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-
-        intent = stripe.PaymentIntent.create(
-            amount=int(order.total_amount * 100),
-            currency="usd",
-            metadata={
-                "order_id": order.id,
-                "order_number": order.order_number,
-            },
-        )
-
-        payment = order.payment
-        payment.stripe_payment_intent_id = intent.id
-        payment.save()
-
-        return Response({
-            "clientSecret": intent.client_secret
-        })
