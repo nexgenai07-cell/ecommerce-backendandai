@@ -10,8 +10,7 @@ from .views import (
     AdminOrderListView,
     AdminOrderStatusUpdateView,
     AdminOrderFilterView,
-    CreatePaymentIntentView,
-)
+    )
 from .return_views import (
     CreateReturnView, ReturnListView, ReturnDetailView, AdminReturnStatusUpdateView,
 )
@@ -28,12 +27,6 @@ urlpatterns = [
     path('<str:order_number>/cancel/', OrderCancelView.as_view(), name='order-cancel'),
     path('<str:order_number>/track/', OrderTrackView.as_view(), name='order-track'),
     path('<str:order_number>/return/', CreateReturnView.as_view(), name='order-return-create'),
-
-    path(
-        "payments/create-intent/",
-        CreatePaymentIntentView.as_view(),
-        name="create-payment-intent",
-    ),
 ]
 
 # Admin order URLs (mounted at /api/v1/admin/orders/)

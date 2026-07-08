@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'apps.ai',
     'apps.social',
     'apps.whatsapp',
+    "apps.payments",
 ]
 
 # -------------------------------------------------

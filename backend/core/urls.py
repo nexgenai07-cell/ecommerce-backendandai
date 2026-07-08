@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/v1/complaints/', include((complaint_urlpatterns, 'complaints'))),
     path('api/v1/admin/complaints/', include((admin_complaint_urlpatterns, 'admin-complaints'))),
     path('api/v1/admin/customers/', include((admin_customer_urlpatterns, 'admin-customers'))),
+    path("api/v1/payments/", include("apps.payments.urls")),
 
     # Notifications
     path('api/v1/notifications/', include('apps.notifications.urls')),
