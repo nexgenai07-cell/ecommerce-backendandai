@@ -1,3 +1,5 @@
+#PATH: apps/orders/admin.py
+
 from django.contrib import admin
 
 from .models import Customer, Order, OrderItem, Payment

@@ -10,6 +10,7 @@ from apps.returns.models import Return
 from apps.returns.serializers import ReturnSerializer, CreateReturnSerializer, AdminReturnStatusSerializer
 from .models import Order
 from apps.users.permissions import IsAdmin
+from core.pagination import StandardResultsPagination
 
 
 class CreateReturnView(APIView):
@@ -51,9 +52,17 @@ class CreateReturnView(APIView):
 
 
 class ReturnListView(generics.ListAPIView):
-    """GET /api/v1/returns/ — customer sees own, admin sees all"""
+    """
+    GET /api/v1/returns/ — customer sees own, admin sees all
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 61) expects
+    {count, next, previous, results}. pagination_class wasn't attached
+    here before, so it fell back to no pagination at all / an
+    incomplete shape. Now explicitly attached.
+    """
     serializer_class = ReturnSerializer
     permission_classes = [permissions.IsAuthenticated]
+    pagination_class = StandardResultsPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -75,7 +84,15 @@ class ReturnDetailView(generics.RetrieveAPIView):
 
 
 class AdminReturnStatusUpdateView(APIView):
-    """PUT /api/v1/admin/returns/{id}/status/"""
+    """
+    PUT /api/v1/admin/returns/{id}/status/
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 63) expects
+    {"message": "Return status updated.", "status": "approved"} — the
+    full ReturnSerializer(return_request).data object was being
+    returned before, which doesn't match. Now returns only the
+    documented message + status.
+    """
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
     def put(self, request, pk):
@@ -91,4 +108,7 @@ class AdminReturnStatusUpdateView(APIView):
         return_request.resolved_at = timezone.now()
         return_request.save()
 
-        return Response(ReturnSerializer(return_request).data)
+        return Response({
+            'message': 'Return status updated.',
+            'status': return_request.status,
+        })

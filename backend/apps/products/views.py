@@ -12,6 +12,7 @@ from .serializers import (
     ProductDetailSerializer,
     ProductCreateUpdateSerializer,
     ProductImageSerializer,
+    LowStockProductSerializer,
 )
 from apps.users.permissions import IsAdmin
 from core.pagination import StandardResultsPagination
@@ -155,12 +156,22 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='low-stock',
             permission_classes=[permissions.IsAuthenticated, IsAdmin])
     def low_stock(self, request):
-        """GET /api/v1/products/low-stock/ — products at or below their threshold"""
+        """
+        GET /api/v1/products/low-stock/ — products at or below their threshold
+
+        FIX (Postman testing — 09 Jul 2026): doc ke mutabiq response mein
+        sirf id, name, stock, low_stock_threshold hone chahiye. Pehle ye
+        ProductListSerializer use kar raha tha jismein low_stock_threshold
+        field hi nahi thi (wo serializer public product listing ke liye
+        bana hai), is liye field kabhi response mein aati hi nahi thi.
+        Ab isके liye alag, chota LowStockProductSerializer use ho raha hai
+        jo sirf doc-required fields return karta hai.
+        """
         qs = Product.objects.filter(is_active=True)
 
         # Compare stock vs threshold in Python (clear and simple for small catalogs)
         low_stock_products = [p for p in qs if p.stock <= p.low_stock_threshold]
-        serializer = ProductListSerializer(low_stock_products, many=True)
+        serializer = LowStockProductSerializer(low_stock_products, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='images',
@@ -211,7 +222,15 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['put'], url_path='images/(?P<image_id>[^/.]+)/set-primary',
             permission_classes=[permissions.IsAuthenticated, IsAdmin])
     def set_primary_image(self, request, pk=None, image_id=None):
-        """PUT /api/v1/products/{id}/images/{image_id}/set-primary/"""
+        """
+        PUT /api/v1/products/{id}/images/{image_id}/set-primary/
+
+        FIX (Postman testing — 09 Jul 2026): doc ke mutabiq response
+        {"message": "Primary image updated.", "image_id": <id>} hona
+        chahiye. Pehle poora ProductImageSerializer(image).data return ho
+        raha tha (id, image url, is_primary, created_at) jo doc se match
+        nahi karta tha. Ab exact documented shape return ho raha hai.
+        """
         product = self.get_object()
         try:
             image = product.images.get(id=image_id)
@@ -222,4 +241,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         image.is_primary = True
         image.save()
 
-        return Response(ProductImageSerializer(image).data)
+        return Response({
+            'message': 'Primary image updated.',
+            'image_id': image.id,
+        })

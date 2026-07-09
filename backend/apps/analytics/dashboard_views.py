@@ -104,6 +104,12 @@ class SalesReportView(APIView):
     """
     GET /api/v1/analytics/sales/?start_date=&end_date=&period=daily|weekly|monthly
     Returns order counts grouped by the requested period — used for bar/line charts.
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 83) expects
+    {"period": "daily", "data": [{"date": "", "total_orders": 10,
+    "total_revenue": 150000}]}. Previously this returned a bare array
+    with field names order_count/revenue/period per row — missing the
+    outer {period, data} wrapper and using the wrong inner field names.
     """
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
@@ -113,20 +119,37 @@ class SalesReportView(APIView):
 
         trunc_fn = {'daily': TruncDate, 'weekly': TruncWeek, 'monthly': TruncMonth}.get(period, TruncDate)
 
-        data = (
-            qs.annotate(period=trunc_fn('created_at'))
-              .values('period')
-              .annotate(order_count=Count('id'), revenue=Sum('total_amount'))
-              .order_by('period')
+        rows = (
+            qs.annotate(bucket=trunc_fn('created_at'))
+              .values('bucket')
+              .annotate(total_orders=Count('id'), total_revenue=Sum('total_amount'))
+              .order_by('bucket')
         )
 
-        return Response(list(data))
+        data = [
+            {
+                'date': row['bucket'],
+                'total_orders': row['total_orders'],
+                'total_revenue': row['total_revenue'] or 0,
+            }
+            for row in rows
+        ]
+
+        return Response({
+            'period': period,
+            'data': data,
+        })
 
 
 class RevenueReportView(APIView):
     """
     GET /api/v1/analytics/revenue/?start_date=&end_date=&period=daily|weekly|monthly
     Same grouping as sales, focused purely on revenue figures.
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 84) expects
+    {"data": [{"period": "2024-01", "revenue": 1500000}]}. Previously
+    this returned a bare array — the outer {"data": [...]} wrapper was
+    missing (inner field names period/revenue were already correct).
     """
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
@@ -143,7 +166,9 @@ class RevenueReportView(APIView):
               .order_by('period')
         )
 
-        return Response(list(data))
+        return Response({
+            'data': list(data),
+        })
 
 
 class OrdersAnalyticsView(APIView):
@@ -262,6 +287,13 @@ class AnalyticsExportView(APIView):
     Returns a CSV file of orders within the date range.
     NOTE: For large datasets this should move to a Celery background task
     that emails/links the file instead of generating it synchronously.
+
+    FIX (Postman testing — 09 Jul 2026): crashed with AttributeError
+    because Order has no `payment_method` field — payment info lives on
+    the related Payment model (order.payment), which may not even exist
+    for every order (e.g. cancelled/unpaid orders). Now reads the
+    payment status safely via hasattr, falling back to "N/A", and drops
+    the non-existent payment_method column from the CSV header/rows.
     """
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
@@ -276,12 +308,13 @@ class AnalyticsExportView(APIView):
         response['Content-Disposition'] = 'attachment; filename="orders_export.csv"'
 
         writer = csv.writer(response)
-        writer.writerow(['Order Number', 'Customer', 'Total Amount', 'Status', 'Payment Method', 'Created At'])
+        writer.writerow(['Order Number', 'Customer', 'Total Amount', 'Status', 'Payment Status', 'Created At'])
 
-        for order in qs.select_related('customer'):
+        for order in qs.select_related('customer', 'payment'):
+            payment_status = order.payment.status if hasattr(order, 'payment') and order.payment else 'N/A'
             writer.writerow([
                 order.order_number, order.customer.name, order.total_amount,
-                order.status, order.payment_method, order.created_at,
+                order.status, payment_status, order.created_at,
             ])
 
         return response

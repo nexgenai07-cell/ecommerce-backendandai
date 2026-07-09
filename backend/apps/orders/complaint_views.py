@@ -14,17 +14,24 @@ from apps.returns.complaint_serializers import (
 )
 from .models import Order, Customer
 from apps.users.permissions import IsAdmin
+from core.pagination import StandardResultsPagination
 
 
 class CreateComplaintView(generics.ListCreateAPIView):
     """
     POST /api/v1/complaints/ -> submit a complaint
     GET  /api/v1/complaints/ -> customer sees own complaints, admin sees all
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 65) expects
+    {count, next, previous, results} for the GET/list action.
+    pagination_class wasn't attached here before, so the response was
+    missing the next/previous keys. Now explicitly attached.
     """
 
     serializer_class = ComplaintSerializer
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = StandardResultsPagination
 
     def get_queryset(self):
         user = self.request.user
@@ -96,7 +103,14 @@ class ComplaintDetailView(generics.RetrieveAPIView):
 
 
 class AdminComplaintStatusUpdateView(APIView):
-    """PUT /api/v1/admin/complaints/{id}/status/"""
+    """
+    PUT /api/v1/admin/complaints/{id}/status/
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 67) expects only
+    {"message": "Complaint status updated."} — the full
+    ComplaintSerializer(complaint).data object was being returned
+    before, which doesn't match.
+    """
 
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
@@ -115,16 +129,18 @@ class AdminComplaintStatusUpdateView(APIView):
         complaint.status = serializer.validated_data["status"]
         complaint.save()
 
-        return Response(
-            ComplaintSerializer(
-                complaint,
-                context={"request": request},
-            ).data
-        )
+        return Response({"message": "Complaint status updated."})
 
 
 class AdminComplaintRespondView(APIView):
-    """PUT /api/v1/admin/complaints/{id}/respond/"""
+    """
+    PUT /api/v1/admin/complaints/{id}/respond/
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 68) expects only
+    {"message": "Response sent.", "status": "resolved"} — the full
+    ComplaintSerializer(complaint).data object was being returned
+    before, which doesn't match.
+    """
 
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
@@ -145,9 +161,7 @@ class AdminComplaintRespondView(APIView):
         complaint.status = "resolved"
         complaint.save()
 
-        return Response(
-            ComplaintSerializer(
-                complaint,
-                context={"request": request},
-            ).data
-        )
+        return Response({
+            "message": "Response sent.",
+            "status": complaint.status,
+        })

@@ -17,6 +17,16 @@ class DiscountViewSet(viewsets.ModelViewSet):
     """
     serializer_class = DiscountSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    # FIX (Postman testing — 09 Jul 2026): doc ke mutabiq GET /discounts/
+    # ek plain array return karta hai (list of discount objects). Pehle koi
+    # pagination_class set nahi thi, is liye project ke settings.py mein jo
+    # global DEFAULT_PAGINATION_CLASS (StandardResultsPagination) set hai
+    # wo automatically apply ho raha tha — isi wajah se response
+    # {"count": .., "results": [...]} shape mein wrap ho k aa raha tha.
+    # pagination_class = None set karne se ye view global default ko
+    # override kar deti hai aur plain array return hoti hai, jaisa doc
+    # mein likha hai.
+    pagination_class = None
 
     def get_queryset(self):
         return Discount.objects.all().order_by('-created_at')

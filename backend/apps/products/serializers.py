@@ -55,6 +55,21 @@ class ProductListSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(url) if request else url
 
 
+class LowStockProductSerializer(serializers.ModelSerializer):
+    """
+    NEW (Postman testing — 09 Jul 2026): dedicated serializer for
+    GET /api/v1/products/low-stock/. Doc requires exactly
+    {id, name, stock, low_stock_threshold} in each item. We deliberately
+    do NOT reuse ProductListSerializer here (it lacks low_stock_threshold
+    and carries extra public-listing fields that aren't part of this
+    endpoint's documented response).
+    """
+
+    class Meta:
+        model = Product
+        fields = ["id", "name", "stock", "low_stock_threshold"]
+
+
 class ProductDetailSerializer(serializers.ModelSerializer):
     """Full serializer for single product page"""
 

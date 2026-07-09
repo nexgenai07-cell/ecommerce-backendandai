@@ -1,3 +1,5 @@
+#PATH: apps/orders/views.py
+
 import stripe
 from django.conf import settings
 import random
@@ -12,12 +14,13 @@ from rest_framework import status, permissions, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 
-from core.pagination import StandardResultsPagination
+from core.pagination import CountResultsPagination
 from apps.notifications.utils import create_notification
 
 from .models import Customer, Order, OrderItem, Payment
 from .serializers import (
     OrderListSerializer,
+    AdminOrderListSerializer,
     OrderDetailSerializer,
     CheckoutSerializer,
     AdminOrderStatusSerializer,
@@ -175,9 +178,17 @@ class CheckoutView(APIView):
 
 
 class OrderListView(generics.ListAPIView):
+    """
+    GET /api/v1/orders/ — My Orders
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 53) only wants
+    {count, results} — no next/previous. Switched from
+    StandardResultsPagination (which adds next/previous) to
+    CountResultsPagination.
+    """
     serializer_class = OrderListSerializer
     permission_classes = [permissions.IsAuthenticated]
-    pagination_class = StandardResultsPagination
+    pagination_class = CountResultsPagination
 
     def get_queryset(self):
         return (
@@ -274,10 +285,18 @@ class OrderTrackView(APIView):
 # ============================================================
 
 class AdminOrderListView(generics.ListAPIView):
-    """GET /api/v1/admin/orders/"""
-    serializer_class = OrderListSerializer
+    """
+    GET /api/v1/admin/orders/
+
+    FIX (Postman testing — 09 Jul 2026): doc (API 57) only wants
+    {count, results} — no next/previous. Switched to
+    CountResultsPagination. Also switched to AdminOrderListSerializer
+    so each result includes the nested "customer": {name, phone}
+    object the doc requires.
+    """
+    serializer_class = AdminOrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    pagination_class = StandardResultsPagination
+    pagination_class = CountResultsPagination
 
     def get_queryset(self):
         return Order.objects.all().order_by("-created_at")
@@ -357,15 +376,29 @@ class AdminOrderStatusUpdateView(APIView):
         notification_type="order",
 )
 
-        return Response(OrderDetailSerializer(order).data)
+        # FIX (Postman testing — 09 Jul 2026): doc (API 59) expects only
+        # {"message": "Order status updated.", "status": "confirmed"} —
+        # the full OrderDetailSerializer(order).data object (with
+        # shipping_address, tracking_number, items, customer info, etc.)
+        # was being returned before, which doesn't match the documented
+        # response shape.
+        return Response({
+            "message": "Order status updated.",
+            "status": order.status,
+        })
     
 class AdminOrderFilterView(generics.ListAPIView):
     """
     GET /api/v1/admin/orders/filter/?status=&start_date=&end_date=&customer_name=&order_number=
     """
-    serializer_class = OrderListSerializer
+    # FIX (Postman testing — 09 Jul 2026): doc (API 58) only wants
+    # {count, results} — no next/previous. Switched to
+    # CountResultsPagination. Also switched to AdminOrderListSerializer
+    # so each result includes the nested "customer": {name, phone}
+    # object the doc requires.
+    serializer_class = AdminOrderListSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
-    pagination_class = StandardResultsPagination
+    pagination_class = CountResultsPagination
 
     def get_queryset(self):
         qs = Order.objects.all().order_by("-created_at")
@@ -415,6 +448,3 @@ class CreatePaymentIntentView(APIView):
                 {"error": "Order not found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-    
-    
-    

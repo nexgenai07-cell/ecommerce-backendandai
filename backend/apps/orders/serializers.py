@@ -30,7 +30,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 class OrderListSerializer(serializers.ModelSerializer):
-    """Lightweight — used for order history list"""
+    """Lightweight — used for order history list (My Orders, API 53)"""
 
     item_count = serializers.SerializerMethodField()
 
@@ -48,6 +48,38 @@ class OrderListSerializer(serializers.ModelSerializer):
 
     def get_item_count(self, obj):
         return obj.items.count()
+
+
+class AdminOrderListSerializer(serializers.ModelSerializer):
+    """
+    NEW (Postman testing — 09 Jul 2026): used ONLY for admin order
+    listing/filtering (API 57, 58). Doc requires a nested
+    "customer": {"name", "phone"} object here — unlike OrderListSerializer
+    (My Orders, API 53) where the logged-in customer doesn't need their
+    own info echoed back. Kept as a separate serializer instead of adding
+    "customer" to OrderListSerializer so API 53's response shape doesn't
+    change.
+    """
+
+    customer = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "order_number",
+            "customer",
+            "total_amount",
+            "discount_amount",
+            "status",
+            "created_at",
+        ]
+
+    def get_customer(self, obj):
+        return {
+            "name": obj.customer.name,
+            "phone": obj.customer.phone,
+        }
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
