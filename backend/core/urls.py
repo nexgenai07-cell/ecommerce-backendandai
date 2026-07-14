@@ -1,3 +1,5 @@
+# PATH: core/urls.py 
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
@@ -57,5 +59,7 @@ urlpatterns = [
 # Serve uploaded media files during development
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
-    
-    handler404 = 'core.views.custom_404'
+
+# Custom 404 handler — only takes effect when DEBUG=False (production),
+# so it must sit outside the `if settings.DEBUG:` block
+handler404 = 'core.views.custom_404'

@@ -27,12 +27,16 @@ class SocialPostSerializer(serializers.ModelSerializer):
 
     # nested, read-only — will be null until the post is published and analytics are fetched
     analytics = SocialPostAnalyticsSerializer(read_only=True)
-    product_name = serializers.CharField(source='product.name', read_only=True, default=None)
+    # FIX (Postman testing — 09 Jul 2026): doc (API 91) expects a nested
+    # "product": {"id": 1, "name": ""} object, not a flat product ID plus
+    # a separate product_name field. Switched to a SerializerMethodField
+    # that builds the nested shape.
+    product = serializers.SerializerMethodField()
 
     class Meta:
         model = SocialPost
         fields = [
-            'id', 'product', 'product_name', 'platform', 'caption', 'hashtags',
+            'id', 'product', 'platform', 'caption', 'hashtags',
             'image_url', 'status', 'scheduled_at', 'published_at',
             'ig_post_id', 'fb_post_id', 'created_by', 'analytics', 'created_at',
         ]
@@ -41,6 +45,14 @@ class SocialPostSerializer(serializers.ModelSerializer):
             'id', 'status', 'published_at', 'ig_post_id', 'fb_post_id',
             'created_by', 'created_at',
         ]
+
+    def get_product(self, obj):
+        if not obj.product:
+            return None
+        return {
+            'id': obj.product.id,
+            'name': obj.product.name,
+        }
 
 
 class SocialPostCreateSerializer(serializers.ModelSerializer):

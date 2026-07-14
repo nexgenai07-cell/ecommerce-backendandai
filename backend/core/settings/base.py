@@ -281,4 +281,22 @@ QDRANT_COLLECTION = 'products'
 # ============================================
 # GEMINI AI
 # ============================================
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+
+
+# ============================================
+# GEMINI AI — multiple keys ke sath fallback support
+# ============================================
+# .env file mein comma-separated keys likhein:
+# GEMINI_API_KEYS=key1,key2,key3
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')  # backward-compat — akeli/pehli key
+
+_gemini_keys_raw = os.getenv('GEMINI_API_KEYS', '')
+if _gemini_keys_raw:
+    GEMINI_API_KEYS = [k.strip() for k in _gemini_keys_raw.split(',') if k.strip()]
+elif GEMINI_API_KEY:
+    GEMINI_API_KEYS = [GEMINI_API_KEY]
+else:
+    GEMINI_API_KEYS = []
+    
+
+INTERNAL_API_URL = os.getenv('INTERNAL_API_URL', 'http://localhost:8000')

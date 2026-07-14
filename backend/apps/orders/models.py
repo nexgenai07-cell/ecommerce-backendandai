@@ -5,12 +5,20 @@ from django.conf import settings
 
 
 class Customer(models.Model):
-    """Store-specific customer profile, auto-created on first order"""
+    """Store-specific customer profile, auto-created on first order.
+
+    FIX: user ab optional hai — guest checkout allow karne k liye.
+    Anonymous customer bhi order place kar sakta hai (name + phone dekar),
+    us waqt user=None save hoga. Jab wahi customer login kar k order karega,
+    normal tarah user set hoga.
+    """
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name="customer_profiles",
+        null=True,
+        blank=True,
     )
 
     store = models.ForeignKey(

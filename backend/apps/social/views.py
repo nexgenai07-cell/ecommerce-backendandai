@@ -26,6 +26,13 @@ class SocialPostViewSet(viewsets.ModelViewSet):
     """
     queryset = SocialPost.objects.select_related('product', 'analytics').all()
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    # FIX (Postman testing — 09 Jul 2026): doc (API 91) expects a plain
+    # array for GET /social/posts/. This viewset was picking up the
+    # project's global DEFAULT_PAGINATION_CLASS (from DRF settings),
+    # which wrapped the response in {count, next, previous, results}.
+    # Setting pagination_class = None here overrides that for this
+    # viewset only, so list() goes back to a plain array.
+    pagination_class = None
 
     def get_serializer_class(self):
         if self.action == 'create':
@@ -34,25 +41,56 @@ class SocialPostViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['put'], url_path='approve')
     def approve(self, request, pk=None):
-        """Moves a pending post to 'approved' status."""
+        """
+        Moves a pending post to 'approved' status.
+
+        FIX (Postman testing — 09 Jul 2026): doc (API 94) expects only
+        {"message": "Post approved and scheduled.", "status": "scheduled"}.
+        The full SocialPostSerializer(post).data object was being
+        returned before, which doesn't match. Also wires up the
+        scheduled_at from the request body, since "approve" per the doc
+        is what actually sets the schedule (not just a status flip).
+        """
         post = self.get_object()
-        post.status = 'approved'
+        scheduled_at = request.data.get('scheduled_at')
+
+        post.status = 'scheduled'
+        if scheduled_at:
+            post.scheduled_at = scheduled_at
         post.save()
-        return Response(SocialPostSerializer(post).data)
+
+        return Response({
+            'message': 'Post approved and scheduled.',
+            'status': post.status,
+        })
 
     @action(detail=True, methods=['put'], url_path='reject')
     def reject(self, request, pk=None):
-        """Moves a pending post to 'rejected' status — it will not be published."""
+        """
+        Moves a pending post to 'rejected' status — it will not be published.
+
+        FIX (Postman testing — 09 Jul 2026): doc (API 95) expects only
+        {"message": "Post rejected.", "status": "rejected"}. The full
+        SocialPostSerializer(post).data object was being returned
+        before, which doesn't match.
+        """
         post = self.get_object()
         post.status = 'rejected'
         post.save()
-        return Response(SocialPostSerializer(post).data)
+
+        return Response({
+            'message': 'Post rejected.',
+            'status': post.status,
+        })
 
     @action(detail=True, methods=['put'], url_path='schedule')
     def schedule(self, request, pk=None):
         """
         Sets the scheduled_at time and moves status to 'scheduled'.
         Body: { "scheduled_at": "2026-06-25T18:00:00Z" }
+
+        NOTE: doc (API 96) explicitly says this returns the FULL updated
+        post object — unlike approve/reject, this one is correct as-is.
         """
         post = self.get_object()
         scheduled_at = request.data.get('scheduled_at')
@@ -83,6 +121,7 @@ class SocialAccountViewSet(viewsets.ModelViewSet):
     queryset = SocialAccount.objects.all()
     serializer_class = SocialAccountSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    pagination_class = None
 
     def perform_create(self, serializer):
         # Single-store setup — always attach the one store that exists.

@@ -5,18 +5,45 @@ from django.conf import settings
 
 
 class Cart(models.Model):
-    user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='carts')
-    store      = models.ForeignKey('stores.Store', on_delete=models.CASCADE)
-    coupon     = models.ForeignKey('products.Discount', on_delete=models.SET_NULL, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    # FIX: user ab optional hai — anonymous customers session_key se
+    # apna cart bana sakte hain. Logged-in hone par user set hota hai.
+    user        = models.ForeignKey(
+                    settings.AUTH_USER_MODEL,
+                    on_delete=models.CASCADE,
+                    related_name='carts',
+                    null=True,
+                    blank=True,
+                  )
+    # NEW — anonymous cart identify karne k liye. Frontend/WhatsApp session
+    # ka session_key yahan store hota hai jab tak user login nahi karta.
+    session_key = models.CharField(max_length=100, null=True, blank=True, db_index=True)
+    store       = models.ForeignKey('stores.Store', on_delete=models.CASCADE)
+    coupon      = models.ForeignKey('products.Discount', on_delete=models.SET_NULL, null=True, blank=True)
+    created_at  = models.DateTimeField(auto_now_add=True)
+    updated_at  = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table        = 'carts'
-        unique_together = ['user', 'store']  # one cart per user per store
+        db_table = 'carts'
+        # FIX: purana unique_together = ['user', 'store'] hata diya kyunke
+        # user ab nullable hai. Ab do separate conditional constraints hain:
+        # ek user-based cart ke liye, ek session_key-based cart ke liye.
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'store'],
+                condition=models.Q(user__isnull=False),
+                name='unique_user_cart_per_store',
+            ),
+            models.UniqueConstraint(
+                fields=['session_key', 'store'],
+                condition=models.Q(session_key__isnull=False),
+                name='unique_session_cart_per_store',
+            ),
+        ]
 
     def __str__(self):
-        return f'Cart of {self.user.email}'
+        if self.user:
+            return f'Cart of {self.user.email}'
+        return f'Cart of session {self.session_key}'
 
     @property
     def subtotal(self):

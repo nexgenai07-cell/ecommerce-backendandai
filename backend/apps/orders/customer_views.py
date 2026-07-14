@@ -11,9 +11,16 @@ class AdminCustomerListView(generics.ListAPIView):
     """
     GET /api/v1/admin/customers/?search=
     Admin-only — list all customers with order count and total spent.
+
+    FIX (Postman testing — 11 Jul 2026): doc (API 101) expects a plain
+    array. No pagination_class was set here, so the project's global
+    DEFAULT_PAGINATION_CLASS was applying automatically, wrapping the
+    response in {count, next, previous, results}. pagination_class =
+    None overrides that for this view.
     """
     serializer_class = CustomerAdminSerializer
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
+    pagination_class = None
 
     def get_queryset(self):
         qs = Customer.objects.select_related('user').all().order_by('-created_at')
