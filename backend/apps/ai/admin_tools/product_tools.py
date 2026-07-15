@@ -101,3 +101,37 @@ def execute_delete_product(user, payload: dict) -> dict:
     if not result['success']:
         return {'success': False, 'error': result['error']}
     return {'success': True, 'message': f'Product {product_id} deleted (soft delete — is_active=False).'}
+
+def list_products(user, category_id: int = None, search: str = None, limit: int = 20) -> dict:
+    """
+    Read-only. Products list karta hai (optional category/search filter ke sath).
+    GET /api/v1/products/search/ use karta hai — admin authenticated hone ki
+    wajah se active + inactive dono products dikhega (get_queryset mein
+    already yehi logic hai: sirf non-admin ke liye is_active filter lagta hai).
+    """
+    params = {}
+    if category_id:
+        params['category_id'] = category_id
+    if search:
+        params['q'] = search
+
+    result = call_internal_api(user, 'GET', '/api/v1/products/search/', params=params)
+    if not result['success']:
+        return {'success': False, 'error': result['error'], 'products': []}
+
+    data = result['data'] or {}
+    results = data.get('results', data if isinstance(data, list) else [])
+
+    products = [
+        {
+            'product_id': p.get('id'),
+            'category_id': p.get('category', {}).get('id') if isinstance(p.get('category'), dict) else None,
+            'name': p.get('name'),
+            'price': p.get('price'),
+            'stock': p.get('stock'),
+            'image': p.get('primary_image'),
+        }
+        for p in results[:limit]
+    ]
+
+    return {'success': True, 'products': products, 'total_found': len(products)}

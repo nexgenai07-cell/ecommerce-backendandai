@@ -57,22 +57,15 @@ TRANSIENT_RETRY_ATTEMPTS = 2       # 503 aane par samei key se kitni baar dobara
 TRANSIENT_RETRY_DELAY_SECONDS = 3  # har retry se pehle kitni dair rukein
 
 
-def call_with_fallback(attempt_fn):
+def call_with_fallback(attempt_fn, groq_fallback_fn=None):
     """
-    Shared retry/fallback wrapper — customer aur admin dono side ke saare
-    Gemini calls (Agent invoke ya embedding requests) isay istemal karte hain.
-
     Args:
-        attempt_fn: koi bhi zero-argument function jo EK poori koshish
-                    karta hai (Gemini ko call karta hai) aur result
-                    return karta hai, ya exception raise karta hai.
-                    Ye function khud gemini_keys.current_key use karega
-                    (jaisa ke customer/admin agents pehle se karte hain).
-
-    Behavior:
-        - Same key se 503/overload par thodi dair ruk kar dobara try
-        - 429/quota par agli key try (rotate)
-        - Koi aur error ho to turant raise (chhupaya nahi jata)
+        attempt_fn:       Gemini ke sath ek koshish (rotate/retry logic pehle jaisi)
+        groq_fallback_fn: OPTIONAL — sari Gemini keys exhaust hone ke baad
+                          aakhri koshish ke tor par Groq se try karta hai.
+                          Sirf chat/agent calls ke liye pass karein — embeddings
+                          ke liye kabhi pass na karein (vector dimensions match
+                          nahi karenge, Qdrant search break ho jayegi).
     """
     last_error = None
 
@@ -87,16 +80,26 @@ def call_with_fallback(attempt_fn):
 
                 if is_transient_error(e) and transient_attempt < TRANSIENT_RETRY_ATTEMPTS:
                     time.sleep(TRANSIENT_RETRY_DELAY_SECONDS)
-                    continue  # samei key se dobara try
+                    continue
 
                 if is_quota_error(e) or is_transient_error(e):
                     moved_to_next_key = True
-                    break  # inner loop se bahar, agli key try karenge
+                    break
 
-                raise  # koi aur error — turant raise, chhupana nahi
+                raise
 
         if moved_to_next_key:
             gemini_keys.rotate()
+
+    # Sari Gemini keys exhaust ho chuki hain — Groq try karo (agar diya gaya ho)
+    if groq_fallback_fn is not None:
+        try:
+            return groq_fallback_fn()
+        except Exception as groq_error:
+            raise Exception(
+                f"Sari Gemini API keys ki quota khatam ho chuki hai, aur Groq fallback "
+                f"bhi fail ho gaya. Gemini error: {last_error} | Groq error: {groq_error}"
+            )
 
     raise Exception(
         f"Sari Gemini API keys ki quota khatam ho chuki hai ya Gemini abhi "

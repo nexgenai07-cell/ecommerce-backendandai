@@ -15,6 +15,7 @@ from apps.ai.admin_tools.product_tools import (
     propose_create_product, execute_create_product,
     propose_update_product, execute_update_product,
     propose_delete_product, execute_delete_product,
+    list_products as _list_products, 
 )
 from apps.ai.admin_tools.category_tools import (
     propose_create_category, execute_create_category,
@@ -28,11 +29,13 @@ from apps.ai.admin_tools.inventory_tools import (
     low_stock as _low_stock,
 )
 from apps.ai.admin_tools.order_tools import (
-    get_order_details_tool as _get_order_details,
-    update_order_tool as _update_order,
-    cancel_order_tool as _cancel_order,
-    track_order_tool as _track_order,
+    get_order_details as _get_order_details,
+    propose_update_order, execute_update_order,
+    propose_cancel_order, execute_cancel_order,
+    track_order as _track_order,
 )
+from apps.ai.audit import log_admin_action
+
 from apps.ai.admin_tools.analytics_tools import (
     sales_report_tool as _sales_report,
     revenue_report_tool as _revenue_report,
@@ -50,6 +53,8 @@ EXECUTORS = {
     'update_category':  execute_update_category,
     'delete_category':  execute_delete_category,
     'update_inventory': execute_update_inventory,
+    'update_order':     execute_update_order,   # NEW
+    'cancel_order':      execute_cancel_order,  # NEW
     # 'update_order' aur 'cancel_order' Day 3 mein yahan add honge
 }
 
@@ -100,6 +105,13 @@ def get_admin_operations_tools(session_key: str, user):
     def get_categories() -> dict:
         """List all product categories with their product counts. Read-only."""
         return _get_categories(user)
+    
+    @tool
+    def list_products(category_id: int = None, search: str = None, limit: int = 20) -> dict:
+        """List products, optionally filtered by category_id or a search
+        keyword. Read-only. Use this whenever the admin asks to see/list
+        products — do not say you lack this capability."""
+        return _list_products(user, category_id, search, limit)
 
     @tool
     def check_inventory(product_id: int) -> dict:
@@ -121,24 +133,33 @@ def get_admin_operations_tools(session_key: str, user):
 
     @tool
     def get_order_details(order_id: str) -> dict:
-        """Get full details of an order by its order number. Read-only. (Stub — Day 3)"""
-        return _get_order_details(order_id)
+        """Get order details by order number. Read-only. Note: returns a
+        lightweight summary (order_number, customer name/phone, total_amount,
+        status) — not full item/shipping details, since no admin endpoint
+        exists yet for full order detail."""
+        return _get_order_details(user, order_id)
 
     @tool
     def update_order(order_id: str, fields: dict) -> dict:
-        """Update an order's fields. MUTATING — requires confirmation. (Stub — Day 3)"""
-        return _update_order(session_key, order_id, fields)
+        """Update an order's status and/or tracking_number. MUTATING —
+        requires confirmation. Only 'status' and 'tracking_number' fields
+        are supported. Valid status values: pending_payment, confirmed,
+        shipped, delivered, cancelled."""
+        return propose_update_order(session_key, order_id, fields)
 
     @tool
     def cancel_order(order_id: str, reason: str = "") -> dict:
-        """Cancel an order. MUTATING and irreversible — requires confirmation. (Stub — Day 3)"""
-        return _cancel_order(session_key, order_id, reason)
+        """Cancel an order, with an optional reason (kept for audit purposes).
+        MUTATING and semi-irreversible — requires confirmation. Delivered
+        orders cannot be cancelled."""
+        return propose_cancel_order(session_key, order_id, reason)
 
     @tool
     def track_order(order_id: str) -> dict:
-        """Get the status timeline of an order. Read-only. (Stub — Day 3)"""
-        return _track_order(order_id)
-
+        """Get the current status of an order. Read-only. Note: detailed
+        status-change history is not tracked — only current status is available."""
+        return _track_order(user, order_id)
+    
     @tool
     def confirm_pending_action(action_id: str) -> dict:
         """Execute a previously proposed mutating action after the admin has
@@ -154,15 +175,20 @@ def get_admin_operations_tools(session_key: str, user):
 
         executor = EXECUTORS.get(tool_name)
         if executor is None:
-            return {'success': False, 'error': f'No executor implemented yet for "{tool_name}" (may be a Day 3+ tool still in stub form).'}
+            return {'success': False, 'error': f'No executor implemented yet for "{tool_name}".'}
 
         result = executor(user, payload)
         clear_pending_action(session_key, action_id)
-        return result
 
+        # NEW — har mutating action AuditLog mein record hoti hai (PDF 7.2)
+        log_admin_action(user, tool_name, payload, result)
+
+        return result
+    
     return [
         create_product, update_product, delete_product,
         create_category, update_category, delete_category, get_categories,
+        list_products,  # <-- NEW
         check_inventory, update_inventory, low_stock,
         get_order_details, update_order, cancel_order, track_order,
         confirm_pending_action,

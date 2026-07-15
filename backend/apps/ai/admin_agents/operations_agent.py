@@ -2,58 +2,48 @@
 
 from django.conf import settings
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from apps.ai.admin_tools.registry import get_admin_operations_tools
-from apps.ai.gemini_utils import gemini_keys, is_quota_error
+from apps.ai.gemini_utils import gemini_keys, call_with_fallback
 
 
 SYSTEM_PROMPT = """You are the Admin Operations Assistant for an e-commerce
 platform's dashboard. You help the admin manage products, categories,
 inventory, and orders through natural conversation.
 
+Whenever the admin asks to see/list something (products, categories, low
+stock items, order info), you MUST use the matching tool and show them the
+ACTUAL data it returns — never say you don't have a tool for something
+without first checking the available tools list. If truly no tool exists
+for what they asked, say so plainly and suggest the closest available option.
+
 ABSOLUTE RULE — NEVER SKIP THIS: Every mutating action (create_product,
 update_product, delete_product, create_category, update_category,
 delete_category, update_inventory, update_order, cancel_order) requires
-EXPLICIT ADMIN CONFIRMATION before it actually takes effect. Here's exactly
-how this works:
+EXPLICIT ADMIN CONFIRMATION before it actually takes effect:
 
-1. When the admin asks you to do a mutating action, call the corresponding
-   tool ONCE with the details they've given you (asking clarifying questions
-   first if required fields are missing — e.g. you cannot create a product
-   without at least a name, price, and stock).
-2. The tool will return a result showing that confirmation is required,
-   along with an action_id and a preview of the proposed change. Show the
-   admin a clear, readable summary of that preview and explicitly ask them
-   to confirm it (e.g. "Confirm karen? (haan/nahi)").
-3. ONLY when the admin clearly confirms (says yes, confirm, go ahead, haan,
-   theek hai, etc.) for that specific pending action, call
-   confirm_pending_action using the exact action_id from step 2.
-4. If the admin declines or changes their mind, do not call
-   confirm_pending_action — just acknowledge and move on.
-5. NEVER call confirm_pending_action speculatively or without a clear,
-   explicit confirmation from the admin in this conversation.
+1. Call the mutating tool ONCE with the details given (ask clarifying
+   questions first if required fields are missing).
+2. The tool returns a preview + action_id — show it clearly and ask the
+   admin to confirm (e.g. "Confirm karen? (haan/nahi)").
+3. ONLY when the admin clearly confirms, call confirm_pending_action with
+   that exact action_id.
+4. If declined, do not call confirm_pending_action.
+5. NEVER call confirm_pending_action speculatively.
 
-Read-only actions (get_categories, check_inventory, low_stock,
-get_order_details, track_order) do NOT need confirmation — just call them
-directly and share the results.
+Read-only actions (list_products, get_categories, check_inventory,
+low_stock, get_order_details, track_order) do NOT need confirmation.
 
-Be precise and professional — this is an operational tool, not a casual
-shopping assistant. Always show exact numbers (prices, quantities, IDs).
-If a request is ambiguous (e.g. "update the price" without saying which
-product or what the new price is), ask a clarifying question instead of
+Be precise and professional. Always show exact numbers (prices, quantities,
+IDs). If a request is ambiguous, ask a clarifying question instead of
 guessing."""
 
 
-def _build_executor(api_key, session_key, user):
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-3.5-flash",
-        google_api_key=api_key,
-        temperature=0.2,
-    )
-
-    tools = get_admin_operations_tools(session_key, user)  # user add kiya
+def _build_executor(llm, session_key, user):
+    tools = get_admin_operations_tools(session_key, user)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -73,14 +63,25 @@ def _build_executor(api_key, session_key, user):
 
 
 def run_operations_agent(user_input: str, session_key: str, user, chat_history=None):
-    """Retry/fallback ke sath — quota (429) par key rotate, overload (503) par samei key se retry."""
-    from apps.ai.gemini_utils import call_with_fallback
+    from apps.ai.admin_response_metadata import extract_admin_metadata
 
     chat_history = chat_history or []
 
-    def attempt():
-        executor = _build_executor(gemini_keys.current_key, session_key, user)
+    def gemini_attempt():
+        llm = ChatGoogleGenerativeAI(
+            model="gemini-3.5-flash",
+            google_api_key=gemini_keys.current_key,
+            temperature=0.2,
+        )
+        executor = _build_executor(llm, session_key, user)
         result = executor.invoke({"input": user_input, "chat_history": chat_history})
-        return result["output"], result.get("intermediate_steps", [])
+        return result["output"], extract_admin_metadata(result.get("intermediate_steps", []))
 
-    return call_with_fallback(attempt)
+    def groq_attempt():
+        llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=settings.GROQ_API_KEY, temperature=0.2)
+        executor = _build_executor(llm, session_key, user)
+        result = executor.invoke({"input": user_input, "chat_history": chat_history})
+        return result["output"], extract_admin_metadata(result.get("intermediate_steps", []))
+
+    groq_fn = groq_attempt if settings.GROQ_API_KEY else None
+    return call_with_fallback(gemini_attempt, groq_fallback_fn=groq_fn)

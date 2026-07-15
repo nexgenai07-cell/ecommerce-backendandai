@@ -63,10 +63,26 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
         session = ChatSession.objects.select_related('user').filter(session_key=self.session_key).first()
         return session is not None and session.user is not None and getattr(session.user, 'role', None) == 'admin'
 
+    async def receive(self, text_data):
+        data = json.loads(text_data)
+        user_message = data.get("message", "")
+
+        try:
+            response_text, metadata = await self.get_agent_response(user_message)
+        except Exception as e:
+            response_text, metadata = f"Sorry, something went wrong: {str(e)}", None
+
+        await self.send(text_data=json.dumps({
+            "type": "message",
+            "sender": "ai",
+            "message": response_text,
+            "metadata": metadata,
+        }))
+
     @sync_to_async
     def get_agent_response(self, user_message):
         chat_session = ChatSession.objects.select_related('user').get(session_key=self.session_key)
-        user = chat_session.user  # NEW
+        user = chat_session.user
 
         ChatMessage.objects.create(session=chat_session, sender='user', message=user_message)
 
@@ -83,9 +99,9 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
         intent = route_intent(user_message)
 
         if intent == 'analytics':
-            output, _ = run_analytics_agent(user_message, chat_history=chat_history)
+            output, metadata = run_analytics_agent(user_message, chat_history=chat_history)
         else:
-            output, _ = run_operations_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)  # user add kiya
+            output, metadata = run_operations_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)
 
         if isinstance(output, list):
             output = " ".join(
@@ -93,6 +109,6 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
                 for block in output
             ).strip()
 
-        ChatMessage.objects.create(session=chat_session, sender='ai', message=output)
+        ChatMessage.objects.create(session=chat_session, sender='ai', message=output, metadata=metadata)
 
-        return output
+        return output, metadata

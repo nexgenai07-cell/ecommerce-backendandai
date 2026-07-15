@@ -298,5 +298,9 @@ elif GEMINI_API_KEY:
 else:
     GEMINI_API_KEYS = []
     
+# ============================================
+# GROQ — Final fallback jab sari Gemini keys exhaust ho jayein (chat/agent only, embeddings ke liye nahi)
+# ============================================
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
 INTERNAL_API_URL = os.getenv('INTERNAL_API_URL', 'http://localhost:8000')

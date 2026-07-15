@@ -102,7 +102,7 @@ def get_cart_order_tools(session_key: str, user=None):
             }
 
         with transaction.atomic():
-            cart_items = list(cart.items.select_related('product', 'product__category').select_for_update().all())
+            cart_items = list(cart.items.select_related('product').select_for_update().all())
 
             out_of_stock = [i.product.name for i in cart_items if i.product.stock < i.quantity]
             if out_of_stock:
