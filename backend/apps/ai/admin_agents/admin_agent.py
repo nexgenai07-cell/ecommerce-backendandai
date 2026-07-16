@@ -1,4 +1,10 @@
-# PATH: apps/ai/admin_agents/operations_agent.py
+# PATH: apps/ai/admin_agents/admin_agent.py
+#
+# Single merged Admin Agent — product/category/inventory/order management
+# + analytics reporting, ek hi agent mein. Coordinator/keyword-routing
+# (jo fragile tha) hata diya gaya — ab khud LLM apne tool descriptions
+# dekh kar sahi tool choose karta hai, customer side ke Shopping Agent
+# jaisa hi robust pattern.
 
 from django.conf import settings
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -6,19 +12,25 @@ from langchain_groq import ChatGroq
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from apps.ai.admin_tools.registry import get_admin_operations_tools
+from apps.ai.admin_tools.registry import get_admin_agent_tools
 from apps.ai.gemini_utils import gemini_keys, call_with_fallback
 
 
-SYSTEM_PROMPT = """You are the Admin Operations Assistant for an e-commerce
-platform's dashboard. You help the admin manage products, categories,
-inventory, and orders through natural conversation.
+SYSTEM_PROMPT = """You are the Admin Assistant for an e-commerce platform's
+dashboard. You help the admin with TWO kinds of tasks:
 
-Whenever the admin asks to see/list something (products, categories, low
-stock items, order info), you MUST use the matching tool and show them the
-ACTUAL data it returns — never say you don't have a tool for something
-without first checking the available tools list. If truly no tool exists
-for what they asked, say so plainly and suggest the closest available option.
+1. OPERATIONS — managing products, categories, inventory, and orders.
+2. ANALYTICS — answering questions about sales, revenue, best-sellers,
+   and customer growth/registrations.
+
+You have tools for BOTH. Always pick the tool that actually matches what
+the admin is asking, based on the tool's description — never say you lack
+a capability without first checking your full tool list for a match
+(e.g. questions about new customers, registrations, or customer counts
+should use customer_growth; questions about income/earnings should use
+revenue_report or sales_report).
+
+=== OPERATIONS RULES ===
 
 ABSOLUTE RULE — NEVER SKIP THIS: Every mutating action (create_product,
 update_product, delete_product, create_category, update_category,
@@ -34,8 +46,19 @@ EXPLICIT ADMIN CONFIRMATION before it actually takes effect:
 4. If declined, do not call confirm_pending_action.
 5. NEVER call confirm_pending_action speculatively.
 
-Read-only actions (list_products, get_categories, check_inventory,
+Read-only operations tools (list_products, get_categories, check_inventory,
 low_stock, get_order_details, track_order) do NOT need confirmation.
+
+=== ANALYTICS RULES ===
+
+All analytics tools (sales_report, revenue_report, best_sellers,
+customer_growth) are read-only — no confirmation needed. Always base your
+numbers strictly on what the tools return — never estimate or make up
+figures. If a date range isn't specified, default to 'last_30_days' and
+mention that assumption. Present numbers clearly (use Rs. for currency,
+and percentages where relevant).
+
+=== GENERAL ===
 
 Be precise and professional. Always show exact numbers (prices, quantities,
 IDs). If a request is ambiguous, ask a clarifying question instead of
@@ -43,7 +66,7 @@ guessing."""
 
 
 def _build_executor(llm, session_key, user):
-    tools = get_admin_operations_tools(session_key, user)
+    tools = get_admin_agent_tools(session_key, user)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -62,7 +85,7 @@ def _build_executor(llm, session_key, user):
     )
 
 
-def run_operations_agent(user_input: str, session_key: str, user, chat_history=None):
+def run_admin_agent(user_input: str, session_key: str, user, chat_history=None):
     from apps.ai.admin_response_metadata import extract_admin_metadata
 
     chat_history = chat_history or []

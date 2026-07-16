@@ -1,36 +1,14 @@
 # PATH: apps/ai/admin_consumers.py
-#
-# Admin dashboard ka WebSocket consumer — customer ChatConsumer se bilkul
-# alag route pe hai. Role check yahan bhi hota hai (defense in depth —
-# StartAdminChatSessionView pe IsAdmin already check ho chuka hai, lekin
-# yahan bhi dobara confirm karte hain taake koi bypass na kar sake).
 
 import json
-import re
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from langchain_core.messages import HumanMessage, AIMessage
 
 from apps.ai.models import ChatSession, ChatMessage
-from apps.ai.admin_agents.coordinator import route_intent
-from apps.ai.admin_agents.operations_agent import run_operations_agent
-from apps.ai.admin_agents.analytics_agent import run_analytics_agent
+from apps.ai.admin_agents.admin_agent import run_admin_agent  # NEW — coordinator/2-agents ki jagah
 
 MAX_HISTORY_MESSAGES = 12
-
-# NEW — kabhi kabhi Groq fallback models (khaas kar chhote/faster models
-# jaise llama-3.1-8b-instant) apna internal tool-call wrapper text mein
-# hi leak kar dete hain, e.g. "<function>asal jawab</function>" — is se
-# raw tags user ko dikh jate hain. Ye regex us wrapper ko hata kar sirf
-# andar wala asal jawab rakh leta hai (agar tags na hon to text waisa hi
-# rehta hai — no-op).
-_LEAKED_FUNCTION_TAG_RE = re.compile(r'</?function[^>]*>', re.IGNORECASE)
-
-
-def _strip_leaked_function_tags(text: str) -> str:
-    if not isinstance(text, str) or '<function' not in text.lower():
-        return text
-    return _LEAKED_FUNCTION_TAG_RE.sub('', text).strip()
 
 
 class AdminChatConsumer(AsyncWebsocketConsumer):
@@ -38,10 +16,9 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_key = self.scope['url_route']['kwargs']['session_key']
 
-        # Role check — session ka user 'admin' role ka hona chahiye
         is_authorized = await self.check_admin_session()
         if not is_authorized:
-            await self.close(code=4403)  # custom close code — "forbidden"
+            await self.close(code=4403)
             return
 
         self.room_group_name = f"admin_chat_{self.session_key}"
@@ -64,7 +41,14 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
         return session is not None and session.user is not None and getattr(session.user, 'role', None) == 'admin'
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": "Invalid message format — expected JSON.",
+            }))
+            return
         user_message = data.get("message", "")
 
         try:
@@ -96,20 +80,14 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
             else:
                 chat_history.append(AIMessage(content=msg.message))
 
-        intent = route_intent(user_message)
-
-        if intent == 'analytics':
-            output, metadata = run_analytics_agent(user_message, user=user, chat_history=chat_history)
-        else:
-            output, metadata = run_operations_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)
+        # NEW — ek hi merged agent, koordinator/intent-routing khatam
+        output, metadata = run_admin_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)
 
         if isinstance(output, list):
             output = " ".join(
                 block.get("text", "") if isinstance(block, dict) else str(block)
                 for block in output
             ).strip()
-
-        output = _strip_leaked_function_tags(output)
 
         ChatMessage.objects.create(session=chat_session, sender='ai', message=output, metadata=metadata)
 

@@ -234,3 +234,17 @@ def get_analytics_tools(user=None):
         return _customer_growth(user, date_range)
 
     return [sales_report, revenue_report, best_sellers, customer_growth]
+
+def get_admin_agent_tools(session_key: str, user):
+    """
+    MERGED — Operations + Analytics tools ek hi list mein. Ye customer
+    side ke pattern jaisa hai: ek hi Agent ko sab tools milte hain, aur
+    khud LLM (uske docstrings dekh kar) decide karta hai kaunsa tool
+    call karna hai — koi fragile keyword-based pre-routing nahi.
+
+    Ye is liye kiya gaya kyunke Coordinator ka keyword-matching
+    (route_intent) real queries pe fail ho raha tha (jaise "customer
+    accounts" query "growth" na likhne ki wajah se Operations Agent ko
+    chali jati thi, jahan customer_growth tool exist hi nahi karta).
+    """
+    return get_admin_operations_tools(session_key, user) + get_analytics_tools(user)

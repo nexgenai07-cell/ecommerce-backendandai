@@ -62,6 +62,7 @@ FRONTEND_URL = os.getenv(
 # -------------------------------------------------
 
 INSTALLED_APPS = [
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -304,3 +305,14 @@ else:
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
 INTERNAL_API_URL = os.getenv('INTERNAL_API_URL', 'http://localhost:8000')
+
+# ALLOWED_HOSTS ab uncomment aur env-driven honi chahiye
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+
+# Railway apne edge pe HTTPS terminate karta hai aur request Django ko HTTP
+# ke tor par forward karta hai, is header ke sath — Django ko batana zaroori
+# hai ke asal request HTTPS thi (warna CSRF/cookie issues aa sakte hain)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Admin panel aur POST requests HTTPS domain se aayengi — CSRF ko batana hoga
+CSRF_TRUSTED_ORIGINS = os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if os.getenv('CSRF_TRUSTED_ORIGINS') else []
