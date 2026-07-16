@@ -1,12 +1,19 @@
 # PATH: apps/ai/admin_tools/registry.py
 #
 # Admin ke plain Python functions ko LangChain @tool format mein wrap
-# karta hai. Ab user bhi factory function mein pass hota hai — kyunke
-# real tools ko authenticated admin ki taraf se HTTP call bhejni hoti hai.
+# karta hai.
 #
-# EXECUTORS dispatch table: confirm_pending_action tool_name se sahi
-# execute_* function dhoondh kar call karta hai.
+# NOTE: HAR parameter jiski default value hai (chahe None ho ya na ho —
+# jaise int=20, str="") ko Optional[...] banaya gaya hai, aur function
+# ke andar 'if x is None: x = default' guard lagai gayi hai. Wajah:
+# Groq (aur kabhi kabhi Gemini bhi) kisi bhi optional-lagne wale
+# parameter ko chhodne ki bajaye explicit 'null' bhej deta hai — agar
+# schema sirf "integer"/"string" allow kare (null nahi), tool call
+# validation fail ho jata hai. Ye sabse pehle 'category_id: int = None'
+# jaisi jagah pakड़ा gaya tha, phir 'limit: int = 20' jaisi jagah bhi —
+# isliye ab HAR defaulted parameter is pattern se banaya gaya hai.
 
+from typing import Optional
 from langchain_core.tools import tool
 
 from apps.ai.admin_tools.pending_actions import get_pending_action, clear_pending_action
@@ -15,7 +22,7 @@ from apps.ai.admin_tools.product_tools import (
     propose_create_product, execute_create_product,
     propose_update_product, execute_update_product,
     propose_delete_product, execute_delete_product,
-    list_products as _list_products, 
+    list_products as _list_products,
 )
 from apps.ai.admin_tools.category_tools import (
     propose_create_category, execute_create_category,
@@ -34,17 +41,15 @@ from apps.ai.admin_tools.order_tools import (
     propose_cancel_order, execute_cancel_order,
     track_order as _track_order,
 )
-from apps.ai.audit import log_admin_action
-
 from apps.ai.admin_tools.analytics_tools import (
     sales_report_tool as _sales_report,
     revenue_report_tool as _revenue_report,
     best_sellers_tool as _best_sellers,
     customer_growth_tool as _customer_growth,
 )
+from apps.ai.audit import log_admin_action
 
 
-# tool_name -> execute_* function (signature: execute_fn(user, payload) -> dict)
 EXECUTORS = {
     'create_product':   execute_create_product,
     'update_product':   execute_update_product,
@@ -53,9 +58,8 @@ EXECUTORS = {
     'update_category':  execute_update_category,
     'delete_category':  execute_delete_category,
     'update_inventory': execute_update_inventory,
-    'update_order':     execute_update_order,   # NEW
-    'cancel_order':      execute_cancel_order,  # NEW
-    # 'update_order' aur 'cancel_order' Day 3 mein yahan add honge
+    'update_order':     execute_update_order,
+    'cancel_order':      execute_cancel_order,
 }
 
 
@@ -63,13 +67,15 @@ def get_admin_operations_tools(session_key: str, user):
     """Admin Operations Agent ke tools — session_key (confirmation-gating) aur user (HTTP calls) se bound."""
 
     @tool
-    def create_product(name: str, price: float, stock: int, category_id: int = None,
-                        description: str = "", original_price: float = None,
-                        sku: str = None, low_stock_threshold: int = None) -> dict:
+    def create_product(name: str, price: float, stock: int, category_id: Optional[int] = None,
+                        description: Optional[str] = "", original_price: Optional[float] = None,
+                        sku: Optional[str] = None, low_stock_threshold: Optional[int] = None) -> dict:
         """Create a new product. MUTATING — only creates a PREVIEW and
         returns requires_confirmation=True with an action_id. Show the
         preview to the admin and ask them to confirm before it's actually
         created. If sku is not given, one will be auto-generated."""
+        if description is None:
+            description = ""
         return propose_create_product(session_key, name, price, stock, category_id,
                                        description, original_price, sku, low_stock_threshold)
 
@@ -87,8 +93,10 @@ def get_admin_operations_tools(session_key: str, user):
         return propose_delete_product(session_key, product_id)
 
     @tool
-    def create_category(name: str, description: str = "") -> dict:
+    def create_category(name: str, description: Optional[str] = "") -> dict:
         """Create a new product category. MUTATING — requires confirmation."""
+        if description is None:
+            description = ""
         return propose_create_category(session_key, name, description)
 
     @tool
@@ -105,12 +113,14 @@ def get_admin_operations_tools(session_key: str, user):
     def get_categories() -> dict:
         """List all product categories with their product counts. Read-only."""
         return _get_categories(user)
-    
+
     @tool
-    def list_products(category_id: int = None, search: str = None, limit: int = 20) -> dict:
+    def list_products(category_id: Optional[int] = None, search: Optional[str] = None, limit: Optional[int] = 20) -> dict:
         """List products, optionally filtered by category_id or a search
         keyword. Read-only. Use this whenever the admin asks to see/list
         products — do not say you lack this capability."""
+        if limit is None:
+            limit = 20
         return _list_products(user, category_id, search, limit)
 
     @tool
@@ -125,7 +135,7 @@ def get_admin_operations_tools(session_key: str, user):
         return propose_update_inventory(session_key, product_id, quantity)
 
     @tool
-    def low_stock(threshold: int = None) -> dict:
+    def low_stock(threshold: Optional[int] = None) -> dict:
         """List products that are low on stock (at or below their own
         configured threshold). If 'threshold' is given, results are
         further narrowed to that value. Read-only."""
@@ -133,33 +143,28 @@ def get_admin_operations_tools(session_key: str, user):
 
     @tool
     def get_order_details(order_id: str) -> dict:
-        """Get order details by order number. Read-only. Note: returns a
-        lightweight summary (order_number, customer name/phone, total_amount,
-        status) — not full item/shipping details, since no admin endpoint
-        exists yet for full order detail."""
+        """Get order details by order number. Read-only."""
         return _get_order_details(user, order_id)
 
     @tool
     def update_order(order_id: str, fields: dict) -> dict:
         """Update an order's status and/or tracking_number. MUTATING —
-        requires confirmation. Only 'status' and 'tracking_number' fields
-        are supported. Valid status values: pending_payment, confirmed,
-        shipped, delivered, cancelled."""
+        requires confirmation."""
         return propose_update_order(session_key, order_id, fields)
 
     @tool
-    def cancel_order(order_id: str, reason: str = "") -> dict:
-        """Cancel an order, with an optional reason (kept for audit purposes).
-        MUTATING and semi-irreversible — requires confirmation. Delivered
-        orders cannot be cancelled."""
+    def cancel_order(order_id: str, reason: Optional[str] = "") -> dict:
+        """Cancel an order, with an optional reason. MUTATING and
+        semi-irreversible — requires confirmation."""
+        if reason is None:
+            reason = ""
         return propose_cancel_order(session_key, order_id, reason)
 
     @tool
     def track_order(order_id: str) -> dict:
-        """Get the current status of an order. Read-only. Note: detailed
-        status-change history is not tracked — only current status is available."""
+        """Get the current status of an order. Read-only."""
         return _track_order(user, order_id)
-    
+
     @tool
     def confirm_pending_action(action_id: str) -> dict:
         """Execute a previously proposed mutating action after the admin has
@@ -180,42 +185,52 @@ def get_admin_operations_tools(session_key: str, user):
         result = executor(user, payload)
         clear_pending_action(session_key, action_id)
 
-        # NEW — har mutating action AuditLog mein record hoti hai (PDF 7.2)
         log_admin_action(user, tool_name, payload, result)
 
         return result
-    
+
     return [
         create_product, update_product, delete_product,
         create_category, update_category, delete_category, get_categories,
-        list_products,  # <-- NEW
+        list_products,
         check_inventory, update_inventory, low_stock,
         get_order_details, update_order, cancel_order, track_order,
         confirm_pending_action,
     ]
 
 
-def get_analytics_tools():
-    """Analytics Agent ke tools — abhi bhi stubs hain (Day 4 mein real honge)."""
+def get_analytics_tools(user=None):
+    """Analytics Agent ke tools — sab read-only hain."""
 
     @tool
-    def sales_report(date_range: str = "last_30_days") -> dict:
-        """Get a sales summary report for a given date range. Read-only. (Stub — Day 4)"""
-        return _sales_report(date_range)
+    def sales_report(date_range: Optional[str] = "last_30_days") -> dict:
+        """Get a sales summary report for a given date range (e.g. 'last_7_days',
+        'last_30_days', 'this_month'). Read-only."""
+        if date_range is None:
+            date_range = "last_30_days"
+        return _sales_report(user, date_range)
 
     @tool
-    def revenue_report(date_range: str = "last_30_days") -> dict:
-        """Get a revenue breakdown report for a given date range. Read-only. (Stub — Day 4)"""
-        return _revenue_report(date_range)
+    def revenue_report(date_range: Optional[str] = "last_30_days") -> dict:
+        """Get a revenue breakdown report for a given date range. Read-only."""
+        if date_range is None:
+            date_range = "last_30_days"
+        return _revenue_report(user, date_range)
 
     @tool
-    def best_sellers(date_range: str = "last_30_days", limit: int = 5) -> dict:
-        """Get the top-selling products for a given date range. Read-only. (Stub — Day 4)"""
-        return _best_sellers(date_range, limit)
+    def best_sellers(date_range: Optional[str] = "last_30_days", limit: Optional[int] = 5) -> dict:
+        """Get the top-selling products for a given date range. Read-only."""
+        if date_range is None:
+            date_range = "last_30_days"
+        if limit is None:
+            limit = 5
+        return _best_sellers(user, date_range, limit)
 
     @tool
-    def customer_growth(date_range: str = "last_30_days") -> dict:
-        """Get new customer count and retention info for a given date range. Read-only. (Stub — Day 4)"""
-        return _customer_growth(date_range)
+    def customer_growth(date_range: Optional[str] = "last_30_days") -> dict:
+        """Get new customer count and retention info for a given date range. Read-only."""
+        if date_range is None:
+            date_range = "last_30_days"
+        return _customer_growth(user, date_range)
 
     return [sales_report, revenue_report, best_sellers, customer_growth]

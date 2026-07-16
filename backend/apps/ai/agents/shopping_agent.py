@@ -103,6 +103,7 @@ def run_shopping_agent(user_input: str, session_key: str, user=None, chat_histor
             model="gemini-3.5-flash",
             google_api_key=gemini_keys.current_key,
             temperature=0.4,
+            max_retries=1,
         )
         executor = _build_executor(llm, session_key, user)
         result = executor.invoke({
@@ -112,16 +113,22 @@ def run_shopping_agent(user_input: str, session_key: str, user=None, chat_histor
         })
         return result["output"], extract_product_metadata(result.get("intermediate_steps", []))
 
-    def groq_attempt():
-        # FINAL fallback — Gemini bilkul available na ho tab hi chalta hai
-        llm = ChatGroq(model="llama-3.3-70b-versatile", groq_api_key=settings.GROQ_API_KEY, temperature=0.4)
-        executor = _build_executor(llm, session_key, user)
-        result = executor.invoke({
-            "input": user_input,
-            "chat_history": chat_history,
-            "customer_context": customer_context,
-        })
-        return result["output"], extract_product_metadata(result.get("intermediate_steps", []))
+    def make_groq_attempt(model_name):
+        def attempt():
+            llm = ChatGroq(model=model_name, groq_api_key=settings.GROQ_API_KEY, temperature=0.4)
+            executor = _build_executor(llm, session_key, user)
+            result = executor.invoke({
+                "input": user_input,
+                "chat_history": chat_history,
+                "customer_context": customer_context,
+            })
+            return result["output"], extract_product_metadata(result.get("intermediate_steps", []))
+        return attempt
 
-    groq_fn = groq_attempt if settings.GROQ_API_KEY else None
-    return call_with_fallback(gemini_attempt, groq_fallback_fn=groq_fn)
+    fallback_fns = []
+    if settings.GROQ_API_KEY:
+        # Do alag Groq models — har ek ki apni alag daily token quota hoti hai
+        fallback_fns.append(make_groq_attempt("llama-3.3-70b-versatile"))
+        fallback_fns.append(make_groq_attempt("llama-3.1-8b-instant"))
+
+    return call_with_fallback(gemini_attempt, fallback_fns=fallback_fns)

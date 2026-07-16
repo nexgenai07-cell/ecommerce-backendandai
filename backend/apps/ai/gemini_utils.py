@@ -57,15 +57,14 @@ TRANSIENT_RETRY_ATTEMPTS = 2       # 503 aane par samei key se kitni baar dobara
 TRANSIENT_RETRY_DELAY_SECONDS = 3  # har retry se pehle kitni dair rukein
 
 
-def call_with_fallback(attempt_fn, groq_fallback_fn=None):
+def call_with_fallback(attempt_fn, fallback_fns=None):
     """
     Args:
-        attempt_fn:       Gemini ke sath ek koshish (rotate/retry logic pehle jaisi)
-        groq_fallback_fn: OPTIONAL — sari Gemini keys exhaust hone ke baad
-                          aakhri koshish ke tor par Groq se try karta hai.
-                          Sirf chat/agent calls ke liye pass karein — embeddings
-                          ke liye kabhi pass na karein (vector dimensions match
-                          nahi karenge, Qdrant search break ho jayegi).
+        attempt_fn:    Gemini ke sath ek koshish (rotate/retry logic pehle jaisi)
+        fallback_fns:  OPTIONAL — list of zero-arg functions, TARTEEB (order)
+                       se ek-ek karke try hoti hain jab sari Gemini keys
+                       exhaust ho jayen. Har fallback apna alag provider/model
+                       istemal kare (taake har ek ki apni alag quota bucket ho).
     """
     last_error = None
 
@@ -91,17 +90,19 @@ def call_with_fallback(attempt_fn, groq_fallback_fn=None):
         if moved_to_next_key:
             gemini_keys.rotate()
 
-    # Sari Gemini keys exhaust ho chuki hain — Groq try karo (agar diya gaya ho)
-    if groq_fallback_fn is not None:
+    # Sari Gemini keys exhaust ho chuki hain — fallbacks ek-ek karke try karo
+    fallback_errors = []
+    for fallback_fn in (fallback_fns or []):
         try:
-            return groq_fallback_fn()
-        except Exception as groq_error:
-            raise Exception(
-                f"Sari Gemini API keys ki quota khatam ho chuki hai, aur Groq fallback "
-                f"bhi fail ho gaya. Gemini error: {last_error} | Groq error: {groq_error}"
-            )
+            return fallback_fn()
+        except Exception as fallback_error:
+            fallback_errors.append(str(fallback_error))
+            continue  # agla fallback try karo
+
+    error_summary = f"Gemini error: {last_error}"
+    if fallback_errors:
+        error_summary += " | " + " | ".join(f"Fallback error: {e}" for e in fallback_errors)
 
     raise Exception(
-        f"Sari Gemini API keys ki quota khatam ho chuki hai ya Gemini abhi "
-        f"overloaded hai. Last error: {last_error}"
+        f"Sari Gemini keys aur fallback providers ki quota khatam ho chuki hai. {error_summary}"
     )

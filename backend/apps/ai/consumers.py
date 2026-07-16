@@ -32,7 +32,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": "Invalid message format — expected JSON.",
+            }))
+            return
         user_message = data.get("message", "")
 
         try:

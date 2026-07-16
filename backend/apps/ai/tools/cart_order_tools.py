@@ -22,7 +22,7 @@ from apps.products.models import Product
 from apps.stores.models import Store
 from apps.orders.models import Customer, Order, OrderItem, Payment
 from apps.orders.views import generate_order_number
-
+from typing import Optional
 
 def _get_or_create_cart(user, session_key):
     store = Store.objects.first()
@@ -41,6 +41,8 @@ def get_cart_order_tools(session_key: str, user=None):
         """Add a product to the customer's cart. Use this when the customer
         clearly wants to buy/add a specific product. product_id must come
         from a previous search_products or get_product_details result."""
+        if quantity is None:
+            quantity = 1
         try:
             product = Product.objects.select_related('category').get(id=product_id, is_active=True)
         except Product.DoesNotExist:
@@ -74,7 +76,7 @@ def get_cart_order_tools(session_key: str, user=None):
         }
 
     @tool
-    def create_order(shipping_address: str, notes: str = "", guest_name: str = None, guest_phone: str = None) -> dict:
+    def create_order(shipping_address: str, notes: str = "", guest_name: Optional[str] = None, guest_phone: Optional[str] = None) -> dict:
         """Create an order (checkout) using everything currently in the
         customer's cart.
 
@@ -84,6 +86,8 @@ def get_cart_order_tools(session_key: str, user=None):
         addition to the shipping_address. If any of these are missing for a
         guest, do not call this tool yet — ask the customer for the missing
         info first."""
+        if notes is None:
+            notes = ""
 
         cart = _get_or_create_cart(user, session_key)
         if not cart.items.exists():
@@ -100,6 +104,7 @@ def get_cart_order_tools(session_key: str, user=None):
                     'with guest_name and guest_phone filled in.'
                 ),
             }
+        # ... baaki function body same rahega
 
         with transaction.atomic():
             cart_items = list(cart.items.select_related('product').select_for_update().all())

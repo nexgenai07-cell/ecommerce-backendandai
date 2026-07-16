@@ -31,6 +31,14 @@ def extract_admin_metadata(intermediate_steps):
     products, seen_product_ids = [], set()
     categories, seen_category_ids = [], set()   # <-- categories bhi list honi chahiye
 
+    # NEW — Day 4 analytics tools ka output. In sab tools se sirf EK hi
+    # result aata hai ek turn mein (koi bhi ek analytics sawal), isliye
+    # list ki zaroorat nahi — bas jo bhi mila wahi rakh lete hain.
+    customer_growth = None
+    sales_report = None
+    revenue_report = None
+    best_sellers = None
+
     def _add_product(p):
         norm = _normalize_product(p)
         if norm and norm['product_id'] not in seen_product_ids:
@@ -68,4 +76,42 @@ def extract_admin_metadata(intermediate_steps):
         if isinstance(tool_output.get('category'), dict):
             _add_category(tool_output['category'])
 
-    return {'products': products, 'categories': categories}
+        # customer_growth_tool output: {'new_customers', 'by_period', 'retention', 'date_range', ...}
+        if 'new_customers' in tool_output:
+            customer_growth = {
+                'date_range': tool_output.get('date_range'),
+                'new_customers': tool_output.get('new_customers'),
+                'by_period': tool_output.get('by_period', []),
+                'retention': tool_output.get('retention'),
+            }
+
+        # sales_report_tool output: {'summary', 'totals', 'date_range', ...}
+        if 'totals' in tool_output and 'summary' in tool_output:
+            sales_report = {
+                'date_range': tool_output.get('date_range'),
+                'summary': tool_output.get('summary'),
+                'totals': tool_output.get('totals'),
+            }
+
+        # revenue_report_tool output: {'revenue_breakdown', 'date_range', ...}
+        if isinstance(tool_output.get('revenue_breakdown'), dict):
+            revenue_report = {
+                'date_range': tool_output.get('date_range'),
+                **tool_output['revenue_breakdown'],
+            }
+
+        # best_sellers_tool output: {'best_sellers': [...], 'date_range', ...}
+        if isinstance(tool_output.get('best_sellers'), list):
+            best_sellers = {
+                'date_range': tool_output.get('date_range'),
+                'items': tool_output['best_sellers'],
+            }
+
+    return {
+        'products': products,
+        'categories': categories,
+        'customer_growth': customer_growth,
+        'sales_report': sales_report,
+        'revenue_report': revenue_report,
+        'best_sellers': best_sellers,
+    }

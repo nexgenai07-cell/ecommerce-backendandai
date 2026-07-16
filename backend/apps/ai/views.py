@@ -30,18 +30,6 @@ class StartChatSessionView(APIView):
         # Single-store setup — always attach the one store that exists
         store = Store.objects.first()
 
-        # 🔍 YAHAN PRINT STATEMENT ADD KI HAI:
-        print("\n" + "="*50)
-        if store:
-            print(f"[DEBUG] Store Instance: {store}")
-            print(f"[DEBUG] Store ID: {store.id}")
-            # Agar Store model mein 'name' ya 'title' field hai, toh aap usey bhi check kar sakti hain:
-            if hasattr(store, 'name'):
-                print(f"[DEBUG] Store Name: {store.name}")
-        else:
-            print("[DEBUG] WARNING: Database mein koi bhi Store nahi mila! 'store' is None.")
-        print("="*50 + "\n")
-
         session = ChatSession.objects.create(
             session_key=session_key,
             store=store,

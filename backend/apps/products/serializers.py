@@ -131,13 +131,13 @@ class ProductCreateUpdateSerializer(serializers.ModelSerializer):
 
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
+            return value
 
         if qs.exists():
             raise serializers.ValidationError(
                 "A product with this SKU already exists."
             )
-
-        return value
+        # return value
 
     def create(self, validated_data):
         request = self.context["request"]
