@@ -1,10 +1,9 @@
 # PATH: apps/ai/admin_agents/admin_agent.py
-#
-# Single merged Admin Agent — product/category/inventory/order management
-# + analytics reporting, ek hi agent mein. Coordinator/keyword-routing
-# (jo fragile tha) hata diya gaya — ab khud LLM apne tool descriptions
-# dekh kar sahi tool choose karta hai, customer side ke Shopping Agent
-# jaisa hi robust pattern.
+
+# FLOW: admin_consumers.py se yahan aata hai. Customer wale
+# shopping_agent.py jaisa hi pattern hai (LLM + tools + fallback),
+# FARQ: tools apps/ai/admin_tools/registry.py se aate hain (product +
+# category + inventory + order + analytics — sab ek sath).
 
 from django.conf import settings
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -12,8 +11,8 @@ from langchain_groq import ChatGroq
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from apps.ai.admin_tools.registry import get_admin_agent_tools
-from apps.ai.gemini_utils import gemini_keys, call_with_fallback
+from apps.ai.admin_tools.registry import get_admin_agent_tools      # FLOW → apps/ai/admin_tools/registry.py
+from apps.ai.gemini_utils import gemini_keys, call_with_fallback    # FLOW → apps/ai/gemini_utils.py (same file jo customer side use karti hai)
 
 
 SYSTEM_PROMPT = """You are the Admin Assistant for an e-commerce platform's
@@ -66,6 +65,10 @@ guessing."""
 
 
 def _build_executor(llm, session_key, user):
+
+    # FLOW: yahan sab admin tools (create/update/delete product,
+    # category, inventory, order, + analytics) ek list mein milte hain
+
     tools = get_admin_agent_tools(session_key, user)
 
     prompt = ChatPromptTemplate.from_messages([
@@ -98,6 +101,9 @@ def run_admin_agent(user_input: str, session_key: str, user, chat_history=None):
             max_retries=1,
         )
         executor = _build_executor(llm, session_key, user)
+
+        # FLOW: LLM yahan decide karta hai kaunsa admin tool call karna hai
+
         result = executor.invoke({"input": user_input, "chat_history": chat_history})
         return result["output"], extract_admin_metadata(result.get("intermediate_steps", []))
 
@@ -113,5 +119,7 @@ def run_admin_agent(user_input: str, session_key: str, user, chat_history=None):
     if settings.GROQ_API_KEY:
         fallback_fns.append(make_groq_attempt("llama-3.3-70b-versatile"))
         fallback_fns.append(make_groq_attempt("llama-3.1-8b-instant"))
+
+    # FLOW → gemini_utils.py se hoke wapis admin_consumers.py aata hai
 
     return call_with_fallback(gemini_attempt, fallback_fns=fallback_fns)

@@ -1,18 +1,17 @@
 # PATH: apps/ai/tools/faq_tools.py
-#
-# Support Agent tool — FAQ knowledge base (Qdrant) se semantic search
-# kar k relevant Q&A chunks return karta hai. Ye "RAG" pattern hai:
-# AI khud jawab nahi banata, pehle relevant document chunks retrieve
-# karta hai, phir unhi ke basis pe natural jawab deta hai (hallucination
-# se bachne k liye).
+
+# FLOW: registry.py ke answer_faq tool se yahan aata hai. Ye RAG
+# (Retrieval-Augmented Generation) pattern hai — AI khud jawab nahi
+# banata, pehle Qdrant se relevant FAQ chunks nikalta hai, phir
+# unhi ke basis pe Agent (LLM) jawab likhta hai.
 
 import requests
 from django.conf import settings
 from qdrant_client import QdrantClient
 
-from apps.ai.gemini_utils import gemini_keys, is_quota_error
+from apps.ai.gemini_utils import gemini_keys, call_with_fallback
 
-FAQ_COLLECTION = "faq_knowledge"
+FAQ_COLLECTION = "faq_knowledge"     # FLOW: ye collection apps/ai/faq_indexing.py se admin panel ke through fill hoti hai
 
 
 def _get_qdrant_client():
@@ -20,6 +19,8 @@ def _get_qdrant_client():
 
 
 def _get_faq_query_embedding(text):
+    """FLOW: product_tools.py ke get_query_embedding() jaisa hi pattern —
+    query ko vector banata hai, taskType='RETRIEVAL_QUERY' se."""
     """taskType='RETRIEVAL_QUERY' — retry/fallback ke sath."""
     from apps.ai.gemini_utils import call_with_fallback
 
@@ -41,6 +42,16 @@ def _get_faq_query_embedding(text):
 
 
 def answer_faq_tool(query: str, limit: int = 3) -> dict:
+
+    """
+    FLOW: registry.py se call hota hai.
+    Flow: customer ka sawal → embedding banti hai (upar wala function) →
+    Qdrant ki faq_knowledge collection search hoti hai → matching
+    Q&A pairs milte hain → ye poora list wapis Agent ko jata hai →
+    Agent inhi answers ke basis pe apna jawab likhta hai (khud se
+    policy invent nahi karta — is liye RAG kehte hain isay).
+    """
+
     """
     TOOL: answer_faq_tool
 
@@ -60,6 +71,8 @@ def answer_faq_tool(query: str, limit: int = 3) -> dict:
         qdrant = _get_qdrant_client()
         query_vector = _get_faq_query_embedding(query)
 
+        # FLOW: ye admin ke upload kiye hue FAQ PDF se bane chunks search karta hai
+        
         search_response = qdrant.query_points(
             collection_name=FAQ_COLLECTION,
             query=query_vector,

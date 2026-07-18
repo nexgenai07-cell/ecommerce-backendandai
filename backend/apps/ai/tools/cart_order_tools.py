@@ -1,26 +1,18 @@
 # PATH: apps/ai/tools/cart_order_tools.py
-#
-# Cart aur Order tools — Day 3.
-# Ye tools direct Django ORM use karte hain (HTTP request nahi), kyunke
-# ye AI agent usi Django process ke andar chalta hai jahan models
-# available hain — isliye JWT token forge karne ki zaroorat nahi.
-#
-# GUEST CHECKOUT: Anonymous customer bhi order place kar sakta hai
-# (name + phone dekar), lekin track_order / cancel_order sirf logged-in
-# customer hi kar sakta hai.
-#
-# Har tool jo product involve karta hai, output mein product_id aur
-# category_id include karta hai — taake consumer.py in IDs ko structured
-# metadata ke tor par frontend ko bhej sake (UI cards render karne ke liye).
+
+# FLOW: shopping_agent.py se yahan aata hai (get_cart_order_tools call
+# hoti hai). Ye tools DIRECT Django ORM use karte hain (Qdrant nahi,
+# koi HTTP call nahi) — kyunke ye AI agent usi Django process ke andar
+# chal raha hai jahan models available hain.
 
 from decimal import Decimal
 from django.db import transaction
 from langchain_core.tools import tool
 
-from apps.cart.models import Cart, CartItem
+from apps.cart.models import Cart, CartItem     # FLOW → cart database tables
 from apps.products.models import Product
 from apps.stores.models import Store
-from apps.orders.models import Customer, Order, OrderItem, Payment
+from apps.orders.models import Customer, Order, OrderItem, Payment      # FLOW → order database tables
 from apps.orders.views import generate_order_number
 from typing import Optional
 
@@ -43,6 +35,9 @@ def get_cart_order_tools(session_key: str, user=None):
         from a previous search_products or get_product_details result."""
         if quantity is None:
             quantity = 1
+
+            # FLOW: yahan seedha Product/Cart/CartItem models pe query chalti hai — DB tak jaata hai
+            
         try:
             product = Product.objects.select_related('category').get(id=product_id, is_active=True)
         except Product.DoesNotExist:

@@ -1,12 +1,17 @@
 # PATH: apps/ai/admin_consumers.py
 
+# FLOW: apps/ai/admin_routing.py se yahan jump hota hai. Customer wale
+# consumers.py jaisa hi structure hai, FARQ: connect() mein role check
+# hota hai, aur ek hi merged run_admin_agent() call hoti hai (customer
+# side pe alag Shopping Agent hai, yahan alag Admin Agent hai).
+
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from asgiref.sync import sync_to_async
 from langchain_core.messages import HumanMessage, AIMessage
 
 from apps.ai.models import ChatSession, ChatMessage
-from apps.ai.admin_agents.admin_agent import run_admin_agent  # NEW — coordinator/2-agents ki jagah
+from apps.ai.admin_agents.admin_agent import run_admin_agent  # FLOW → apps/ai/admin_agents/admin_agent.py
 
 MAX_HISTORY_MESSAGES = 12
 
@@ -16,9 +21,13 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         self.session_key = self.scope['url_route']['kwargs']['session_key']
 
+        # FLOW: Role dobara yahan check hota hai (defense-in-depth) —
+        # StartAdminChatSessionView mein already check ho chuka hai,
+        # lekin yahan bhi confirm karte hain koi bypass na kar sake
+
         is_authorized = await self.check_admin_session()
         if not is_authorized:
-            await self.close(code=4403)
+            await self.close(code=4403)     # FLOW: yahan connection reject ho jata hai
             return
 
         self.room_group_name = f"admin_chat_{self.session_key}"
@@ -80,7 +89,10 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
             else:
                 chat_history.append(AIMessage(content=msg.message))
 
-        # NEW — ek hi merged agent, koordinator/intent-routing khatam
+        # FLOW → apps/ai/admin_agents/admin_agent.py — YAHAN SE ASAL AI KAAM SHURU HOTA HAI
+        # (customer side pe koordineter/routing wali cheez yahan nahi hai —
+        # ek hi merged agent hai jo khud decide karta hai kaunsa tool chahiye)
+
         output, metadata = run_admin_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)
 
         if isinstance(output, list):

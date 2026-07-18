@@ -1,12 +1,8 @@
 # PATH: apps/ai/gemini_utils.py
-#
-# Gemini API key fallback manager + transient-error retry helper.
-#
-# Do tarah ke errors alag tarah handle hote hain:
-#   - QUOTA errors (429) — is key ki quota khatam, AGLI KEY try karo
-#   - TRANSIENT errors (503, overloaded) — Google ka server abhi busy hai,
-#     SAMEI key se thodi dair baad DOBARA try karo (rotate karne ka koi
-#     faida nahi, kyunke masla key ka nahi, Google ke server ka hai)
+
+# FLOW: Ye file kisi bhi single "step" mein nahi hai — ye ek UTILITY hai
+# jo shopping_agent.py, admin_agent.py, aur embedding-wali tools (search)
+# SAB use karte hain jab bhi Gemini/Groq ko call karna ho.
 
 import time
 from django.conf import settings
@@ -23,7 +19,7 @@ class GeminiKeyManager:
 
     @property
     def current_key(self):
-        return self.keys[self.index]
+        return self.keys[self.index]        # FLOW: agent files isi property se current active key uthate hain
 
     def rotate(self):
         self.index = (self.index + 1) % len(self.keys)
@@ -73,7 +69,7 @@ def call_with_fallback(attempt_fn, fallback_fns=None):
 
         for transient_attempt in range(TRANSIENT_RETRY_ATTEMPTS + 1):
             try:
-                return attempt_fn()
+                return attempt_fn()         # FLOW: yahan se agent ka poora LLM+tools invoke chalta hai
             except Exception as e:
                 last_error = e
 
@@ -94,7 +90,7 @@ def call_with_fallback(attempt_fn, fallback_fns=None):
     fallback_errors = []
     for fallback_fn in (fallback_fns or []):
         try:
-            return fallback_fn()
+            return fallback_fn()        # FLOW: Groq wale attempt yahan chalte hain
         except Exception as fallback_error:
             fallback_errors.append(str(fallback_error))
             continue  # agla fallback try karo

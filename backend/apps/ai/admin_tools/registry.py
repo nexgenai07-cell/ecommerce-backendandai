@@ -1,22 +1,13 @@
 # PATH: apps/ai/admin_tools/registry.py
-#
-# Admin ke plain Python functions ko LangChain @tool format mein wrap
-# karta hai.
-#
-# NOTE: HAR parameter jiski default value hai (chahe None ho ya na ho —
-# jaise int=20, str="") ko Optional[...] banaya gaya hai, aur function
-# ke andar 'if x is None: x = default' guard lagai gayi hai. Wajah:
-# Groq (aur kabhi kabhi Gemini bhi) kisi bhi optional-lagne wale
-# parameter ko chhodne ki bajaye explicit 'null' bhej deta hai — agar
-# schema sirf "integer"/"string" allow kare (null nahi), tool call
-# validation fail ho jata hai. Ye sabse pehle 'category_id: int = None'
-# jaisi jagah pakड़ा gaya tha, phir 'limit: int = 20' jaisi jagah bhi —
-# isliye ab HAR defaulted parameter is pattern se banaya gaya hai.
+
+# FLOW: admin_agent.py se yahan aata hai. Customer side ke registry.py
+# jaisa hi role hai, FARQ: mutating tools yahan seedha DB/API change
+# nahi karti — pehle preview banati hain (confirmation-gating).
 
 from typing import Optional
 from langchain_core.tools import tool
 
-from apps.ai.admin_tools.pending_actions import get_pending_action, clear_pending_action
+from apps.ai.admin_tools.pending_actions import get_pending_action, clear_pending_action    # FLOW → pending_actions.py
 
 from apps.ai.admin_tools.product_tools import (
     propose_create_product, execute_create_product,
@@ -47,8 +38,7 @@ from apps.ai.admin_tools.analytics_tools import (
     best_sellers_tool as _best_sellers,
     customer_growth_tool as _customer_growth,
 )
-from apps.ai.audit import log_admin_action
-
+from apps.ai.audit import log_admin_action      # FLOW → apps/ai/audit.py
 
 EXECUTORS = {
     'create_product':   execute_create_product,
@@ -76,6 +66,10 @@ def get_admin_operations_tools(session_key: str, user):
         created. If sku is not given, one will be auto-generated."""
         if description is None:
             description = ""
+
+        # FLOW → apps/ai/admin_tools/product_tools.py ka propose_create_product()
+        # Ye SEEDHA product nahi banata — sirf Redis mein pending action save karta hai
+
         return propose_create_product(session_key, name, price, stock, category_id,
                                        description, original_price, sku, low_stock_threshold)
 
@@ -171,7 +165,10 @@ def get_admin_operations_tools(session_key: str, user):
         explicitly confirmed it. Only call this AFTER the admin has clearly
         said yes/confirm for that specific action_id — never call it
         proactively or guess an action_id."""
-        pending = get_pending_action(session_key, action_id)
+
+        # FLOW: Admin ke "haan/confirm" bolne pe YE tool call hota hai
+
+        pending = get_pending_action(session_key, action_id)    # FLOW → pending_actions.py se Redis se nikalta hai
         if pending is None:
             return {'success': False, 'error': 'This confirmation has expired or was not found. Please propose the action again.'}
 
@@ -179,13 +176,17 @@ def get_admin_operations_tools(session_key: str, user):
         payload = pending['kwargs']
 
         executor = EXECUTORS.get(tool_name)
+
+        # FLOW: EXECUTORS dict se sahi execute_* function milta hai
+        # (jaise execute_create_product) — TABHI asal HTTP call jaati hai
+
         if executor is None:
             return {'success': False, 'error': f'No executor implemented yet for "{tool_name}".'}
 
-        result = executor(user, payload)
+        result = executor(user, payload)     # FLOW → product_tools.py ka execute_create_product() → api_client.py
         clear_pending_action(session_key, action_id)
 
-        log_admin_action(user, tool_name, payload, result)
+        log_admin_action(user, tool_name, payload, result)      # FLOW → apps/ai/audit.py — AuditLog mein save
 
         return result
 

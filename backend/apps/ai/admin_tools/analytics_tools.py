@@ -1,21 +1,11 @@
 # PATH: apps/ai/admin_tools/analytics_tools.py
-#
-# Analytics Agent ke tools — Day 4 REAL implementation. Sab read-only
-# hain, isliye confirmation gating ki zaroorat nahi (jaisa PDF section
-# 4.2 mein hai). Har tool apps/analytics ke maujooda Django REST
-# endpoints ko HTTP se call karta hai (call_internal_api se) — koi
-# direct DB/ORM access nahi, jaisa doc section 5 ka requirement hai
-# ("Every tool is a thin, validated wrapper around an existing Django
-# REST endpoint").
-#
-# Tool ka input 'date_range' ek human-friendly keyword hai (jaisa PDF
-# section 6 Day 1 contract mein diya gaya, e.g. "last_30_days"), lekin
-# asal endpoints start_date/end_date/period query params expect karte
-# hain — is liye _resolve_date_range() us translation ka kaam karta hai.
+
+# FLOW: registry.py ke get_analytics_tools() se yahan aata hai. Sab
+# READ-ONLY hain — koi confirmation-gating nahi (koi mutation nahi hoti).
 
 from datetime import date, timedelta
 
-from apps.ai.admin_tools.api_client import call_internal_api
+from apps.ai.admin_tools.api_client import call_internal_api     # FLOW → api_client.py (yahan se apps/analytics/views.py tak jata hai)
 
 _SUPPORTED_RANGES = (
     'today', 'yesterday', 'last_7_days', 'last_30_days', 'last_90_days',
@@ -24,6 +14,10 @@ _SUPPORTED_RANGES = (
 
 
 def _resolve_date_range(date_range: str):
+
+    """FLOW: Ye helper sab 4 tools ke andar call hota hai —
+    'last_30_days' jaisa keyword ko actual start_date/end_date mein convert karta hai."""
+
     """
     'date_range' keyword ko (start_date, end_date) ISO strings mein
     convert karta hai. Na-pehchana-gaya keyword bhi silently
@@ -59,6 +53,11 @@ def _resolve_date_range(date_range: str):
 
 
 def sales_report_tool(user, date_range: str = "last_30_days") -> dict:
+
+    """FLOW: registry.py se call hota hai → _resolve_date_range() se dates banti hain
+    → api_client.py se GET /api/v1/analytics/sales/ hit hota hai
+    → apps/analytics/views.py tak request jati hai → response yahan wapis aata hai"""
+
     """GET /api/v1/analytics/sales/ — order count + revenue, daily grouped."""
     start_date, end_date = _resolve_date_range(date_range)
     params = {'period': 'daily'}
@@ -84,6 +83,9 @@ def sales_report_tool(user, date_range: str = "last_30_days") -> dict:
 
 
 def revenue_report_tool(user, date_range: str = "last_30_days") -> dict:
+
+    """FLOW: sales_report_tool() jaisa hi pattern, /api/v1/analytics/revenue/ hit karta hai"""
+
     """GET /api/v1/analytics/revenue/ — revenue grouped by period (cancelled orders excluded)."""
     start_date, end_date = _resolve_date_range(date_range)
     params = {'period': 'daily'}
@@ -107,6 +109,7 @@ def revenue_report_tool(user, date_range: str = "last_30_days") -> dict:
 
 
 def best_sellers_tool(user, date_range: str = "last_30_days", limit: int = 5) -> dict:
+    """FLOW: /api/v1/analytics/products/best-sellers/ hit karta hai"""
     """GET /api/v1/analytics/products/best-sellers/ — top products by units sold."""
     start_date, end_date = _resolve_date_range(date_range)
     params = {'limit': limit}
@@ -134,6 +137,10 @@ def best_sellers_tool(user, date_range: str = "last_30_days", limit: int = 5) ->
 
 
 def customer_growth_tool(user, date_range: str = "last_30_days") -> dict:
+
+    """FLOW: /api/v1/analytics/customers/growth/ hit karta hai.
+    Note: 'retention' hamesha None hai — koi cohort-tracking table DB mein nahi hai abhi."""
+    
     """
     GET /api/v1/analytics/customers/growth/ — new customer count per period.
     Note: 'retention' (PDF output field) is not tracked anywhere in the

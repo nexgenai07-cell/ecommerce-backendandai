@@ -1,7 +1,8 @@
 # PATH: apps/ai/agents/shopping_agent.py
-#
-# Shopping AI Agent — Gemini 3.5 primary, Groq (llama-3.3-70b-versatile)
-# FINAL fallback jab sari Gemini keys exhaust ho jayein.
+
+# FLOW: apps/ai/consumers.py ke get_agent_response() se yahan aata hai.
+# Ye file LangChain Agent banati hai — jo tools decide karta hai ke
+# customer ke message ka jawab dene ke liye kaunsa tool call karna hai.
 
 from django.conf import settings
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -9,9 +10,9 @@ from langchain_groq import ChatGroq
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-from apps.ai.tools.registry import SHOPPING_AGENT_TOOLS
-from apps.ai.tools.cart_order_tools import get_cart_order_tools
-from apps.ai.gemini_utils import gemini_keys, call_with_fallback
+from apps.ai.tools.registry import SHOPPING_AGENT_TOOLS     # FLOW → apps/ai/tools/registry.py
+from apps.ai.tools.cart_order_tools import get_cart_order_tools      # FLOW → apps/ai/tools/cart_order_tools.py
+from apps.ai.gemini_utils import gemini_keys, call_with_fallback    # FLOW → apps/ai/gemini_utils.py
 
 
 SYSTEM_PROMPT = """You are a warm, proactive, and highly engaging shopping assistant
@@ -73,8 +74,12 @@ def _build_tools(session_key, user):
 
 
 def _build_executor(llm, session_key, user):
+
+    # FLOW: yahan dono jagah se tools ikattha hote hain —
+    # search/compare/FAQ tools (registry.py) + cart/order tools (cart_order_tools.py)
+
     """Ab llm object directly leta hai — Gemini ya Groq dono chal sakte hain."""
-    tools = _build_tools(session_key, user)
+    tools = SHOPPING_AGENT_TOOLS + get_cart_order_tools(session_key, user)
 
     prompt = ChatPromptTemplate.from_messages([
         ("system", SYSTEM_PROMPT),
@@ -94,7 +99,7 @@ def _build_executor(llm, session_key, user):
 
 
 def run_shopping_agent(user_input: str, session_key: str, user=None, chat_history=None, customer_context: str = ""):
-    from apps.ai.response_metadata import extract_product_metadata
+    from apps.ai.response_metadata import extract_product_metadata      # FLOW → apps/ai/response_metadata.py
 
     chat_history = chat_history or []
 
@@ -106,11 +111,20 @@ def run_shopping_agent(user_input: str, session_key: str, user=None, chat_histor
             max_retries=1,
         )
         executor = _build_executor(llm, session_key, user)
+
+        # FLOW: YAHAN LLM ASAL MEIN CALL HOTA HAI — Gemini decide karta
+        # hai kaunsa tool call karna hai (jaise search_products,
+        # add_to_cart, ya seedha jawab de dena bina tool ke)
+
         result = executor.invoke({
             "input": user_input,
             "chat_history": chat_history,
             "customer_context": customer_context,
         })
+
+        # FLOW: result["intermediate_steps"] mein har tool call ka record hai —
+        # ye extract_product_metadata() ko diya jata hai
+
         return result["output"], extract_product_metadata(result.get("intermediate_steps", []))
 
     def make_groq_attempt(model_name):
@@ -127,8 +141,11 @@ def run_shopping_agent(user_input: str, session_key: str, user=None, chat_histor
 
     fallback_fns = []
     if settings.GROQ_API_KEY:
-        # Do alag Groq models — har ek ki apni alag daily token quota hoti hai
+        
         fallback_fns.append(make_groq_attempt("llama-3.3-70b-versatile"))
         fallback_fns.append(make_groq_attempt("llama-3.1-8b-instant"))
+
+        # FLOW → apps/ai/gemini_utils.py — key rotation/retry/fallback yahan hota hai,
+        # phir wapis (output, metadata) tuple deta hai — ye consumers.py mein jata hai
 
     return call_with_fallback(gemini_attempt, fallback_fns=fallback_fns)

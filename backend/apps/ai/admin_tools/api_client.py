@@ -1,17 +1,9 @@
 # PATH: apps/ai/admin_tools/api_client.py
-#
-# Admin tools ke liye shared HTTP client. PDF ka explicit requirement hai:
-# "Every tool is a thin, validated wrapper around an existing Django REST
-# endpoint. Tools never talk to the database directly." — isliye yahan
-# hum seedha ORM use nahi kar rahe, balke apne hi Django REST API ko
-# HTTP se call kar rahe hain, jaisa production mein hota.
-#
-# AUTHENTICATION: Admin ka WebSocket session sirf unka Django User object
-# jaanta hai (JWT token store nahi karta — customer side mein bhi hum
-# original JWT store nahi karte). Isliye har request se pehle, us admin
-# user ke liye ek FRESH JWT access token mint karte hain (SimpleJWT ka
-# AccessToken.for_user() — koi login/password ki zaroorat nahi, kyunke
-# hum already jaante hain ke ye authenticated admin session hai).
+
+# FLOW: product_tools.py/category_tools.py/inventory_tools.py/order_tools.py
+# ke execute_* functions se yahan aata hai. Ye file ek REAL HTTP request
+# banati hai project ki apni Django REST API ko — jaise koi browser
+# request bhej raha ho.
 
 import requests
 from django.conf import settings
@@ -45,9 +37,19 @@ def call_internal_api(user, method: str, path: str, json_body: dict = None, para
     Ye function har real admin tool istemal karega — taake HTTP-calling
     logic, error handling, aur auth ek hi jagah likha ho.
     """
+
+    # FLOW: admin ke liye ek FRESH JWT yahan generate hota hai (login
+    # dobara karne ki zaroorat nahi — hum already jaante hain ye
+    # authenticated admin session hai)
+
     token = _mint_token_for_user(user)
     url = f"{_get_base_url()}{path}"
     headers = {'Authorization': f'Bearer {token}'}
+
+    # FLOW: YAHAN ASAL REQUEST JAATI HAI — project ki apni Django REST
+    # API ko (jaise POST /api/v1/products/) — matlab ProductViewSet
+    # (apps/products/views.py) tak jaata hai, bilkul normal DRF request
+    # ki tarah, permission checks (IsAdmin) bhi wahan lagte hain
 
     try:
         response = requests.request(
@@ -70,4 +72,5 @@ def call_internal_api(user, method: str, path: str, json_body: dict = None, para
         error_msg = data.get('error') if isinstance(data, dict) and 'error' in data else (data or response.text)
         return {'success': False, 'status_code': response.status_code, 'data': data, 'error': error_msg}
 
+    # ... response parse karke wapis product_tools.py ko deta hai
     return {'success': True, 'status_code': response.status_code, 'data': data, 'error': None}

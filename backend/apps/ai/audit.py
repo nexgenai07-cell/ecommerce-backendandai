@@ -1,9 +1,8 @@
 # PATH: apps/ai/audit.py
-#
-# Har mutating admin action ko AuditLog mein record karta hai — PDF section
-# 7.2 requirement: "Audit log of every mutating action taken via the AI
-# assistant". Ye generically confirm_pending_action se call hota hai,
-# taake har naye tool ke liye alag se audit-logging code na likhni pare.
+
+# FLOW: registry.py ke confirm_pending_action se, HAR mutating action
+# ke execute hone ke turant baad call hota hai. Isay AuditLog model
+# (apps/ai/models.py) mein ek row daalni hoti hai.
 
 from apps.ai.models import AuditLog
 from apps.stores.models import Store
@@ -26,6 +25,15 @@ ENTITY_MAP = {
 
 
 def log_admin_action(user, tool_name: str, payload: dict, result: dict):
+
+    """
+    FLOW: confirm_pending_action() se call hota hai, argument mein
+    tool ka naam, jo payload bheja gaya tha, aur asal execute ka result
+    milta hai — isi se AuditLog.objects.create() ban jata hai.
+    → Yahan se kahin aage nahi jata — ye chain ka AAKHRI step hai
+      audit trail ke liye.
+    """
+
     """
     Ek mutating action complete hone ke baad AuditLog entry banata hai.
     Fail-safe hai — agar logging mein hi koi error aa jaye, poori request
@@ -49,6 +57,9 @@ def log_admin_action(user, tool_name: str, payload: dict, result: dict):
         if store is None:
             store = Store.objects.first()
 
+        # FLOW: yahan asal DB row bantа hai — Django admin panel se
+        # /admin/ai/auditlog/ pe ye dekhi ja sakti hai
+
         AuditLog.objects.create(
             store=store,
             user=user,
@@ -63,4 +74,4 @@ def log_admin_action(user, tool_name: str, payload: dict, result: dict):
         # Audit logging fail hone se asal action revert nahi hona chahiye —
         # bas silently skip karte hain (production mein isay proper
         # logging/monitoring se track karna chahiye).
-        pass
+        pass        # FLOW: audit fail hone se asal action revert nahi hota — silently skip

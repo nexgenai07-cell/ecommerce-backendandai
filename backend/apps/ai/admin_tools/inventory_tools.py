@@ -1,15 +1,15 @@
 # PATH: apps/ai/admin_tools/inventory_tools.py
-#
-# Admin Operations Agent ke inventory tools — Day 2 REAL implementation.
-# Note: codebase mein alag "Inventory" endpoint nahi hai — stock seedha
-# Product model ka field hai, isliye ye tools Product endpoints hi
-# istemal karte hain.
+
+# FLOW: registry.py se yahan aata hai. Note: koi alag "Inventory"
+# endpoint nahi hai — stock seedha Product model ka field hai, is liye
+# ye tools bhi Product endpoints hi use karte hain (api_client.py se).
 
 from apps.ai.admin_tools.api_client import call_internal_api
 from apps.ai.admin_tools.pending_actions import create_pending_action
 
 
 def check_inventory(user, product_id: int) -> dict:
+    """FLOW: Read-only — GET /api/v1/products/{id}/ se stock nikalta hai."""
     """Read-only — GET /api/v1/products/{id}/ se stock nikalta hai."""
     result = call_internal_api(user, 'GET', f'/api/v1/products/{product_id}/')
     if not result['success']:
@@ -27,6 +27,7 @@ def check_inventory(user, product_id: int) -> dict:
 
 
 def propose_update_inventory(session_key: str, product_id: int, quantity: int) -> dict:
+    """FLOW: registry.py ke update_inventory tool se call hota hai — preview banata hai."""
     """Stock update ka preview — asal PATCH confirm ke baad."""
     preview = {'action': 'update_inventory', 'product_id': product_id, 'new_quantity': quantity}
     pending_kwargs = {'product_id': product_id, 'quantity': quantity}
@@ -35,9 +36,11 @@ def propose_update_inventory(session_key: str, product_id: int, quantity: int) -
 
 
 def execute_update_inventory(user, payload: dict) -> dict:
+    """FLOW: confirm_pending_action se call hota hai — YAHAN asal stock update hota hai."""
     """Confirm hone ke baad PATCH /api/v1/products/{id}/ sirf 'stock' field ke sath."""
     product_id = payload['product_id']
     quantity = payload['quantity']
+    # FLOW → api_client.py → PATCH /api/v1/products/{id}/ (sirf 'stock' field)
     result = call_internal_api(user, 'PATCH', f'/api/v1/products/{product_id}/', json_body={'stock': quantity})
     if not result['success']:
         return {'success': False, 'error': result['error']}
@@ -45,6 +48,10 @@ def execute_update_inventory(user, payload: dict) -> dict:
 
 
 def low_stock(user, threshold: int = None) -> dict:
+
+    """FLOW: Read-only — GET /api/v1/products/low-stock/ hit karta hai,
+    phir agar admin ne extra threshold diya ho to client-side filter lagata hai."""
+    
     """
     Read-only. GET /api/v1/products/low-stock/ har product ke apne
     low_stock_threshold ke against check karta hai (endpoint khud koi
