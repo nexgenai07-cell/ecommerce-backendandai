@@ -24,7 +24,6 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
         # FLOW: Role dobara yahan check hota hai (defense-in-depth) —
         # StartAdminChatSessionView mein already check ho chuka hai,
         # lekin yahan bhi confirm karte hain koi bypass na kar sake
-
         is_authorized = await self.check_admin_session()
         if not is_authorized:
             await self.close(code=4403)     # FLOW: yahan connection reject ho jata hai
@@ -77,9 +76,17 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
         chat_session = ChatSession.objects.select_related('user').get(session_key=self.session_key)
         user = chat_session.user
 
+        # Save standard incoming user message
         ChatMessage.objects.create(session=chat_session, sender='user', message=user_message)
 
-        previous_messages = list(chat_session.messages.order_by('-created_at')[1:MAX_HISTORY_MESSAGES + 1])
+        # FIX: Admin hamesha logged-in hota hai, isliye customer side ke
+        # logged-in pattern jaisa hi cross-session memory honi chahiye —
+        # sirf isi session_key tak mehdood nahi.
+        previous_messages = list(
+            ChatMessage.objects.filter(session__user=user)
+            .select_related('session')
+            .order_by('-created_at')[1:MAX_HISTORY_MESSAGES + 1]
+        )
         previous_messages.reverse()
 
         chat_history = []
@@ -90,9 +97,6 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
                 chat_history.append(AIMessage(content=msg.message))
 
         # FLOW → apps/ai/admin_agents/admin_agent.py — YAHAN SE ASAL AI KAAM SHURU HOTA HAI
-        # (customer side pe koordineter/routing wali cheez yahan nahi hai —
-        # ek hi merged agent hai jo khud decide karta hai kaunsa tool chahiye)
-
         output, metadata = run_admin_agent(user_message, session_key=self.session_key, user=user, chat_history=chat_history)
 
         if isinstance(output, list):
@@ -101,6 +105,7 @@ class AdminChatConsumer(AsyncWebsocketConsumer):
                 for block in output
             ).strip()
 
+        # Save AI generation response along with its metadata
         ChatMessage.objects.create(session=chat_session, sender='ai', message=output, metadata=metadata)
 
         return output, metadata

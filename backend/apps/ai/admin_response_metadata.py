@@ -1,10 +1,7 @@
 # PATH: apps/ai/admin_response_metadata.py
 #
-# Admin tool calls (intermediate_steps) se product/category data extract
+# Admin tool calls (intermediate_steps) se product/category/customer data extract
 # karta hai — customer side ke response_metadata.py jaisa hi pattern.
-# Admin tools ke output shapes alag hain (real Django serializer fields:
-# 'id', nested 'category': {id, name}, 'primary_image'), isliye normalize
-# karna zaroori hai.
 
 def _normalize_product(p):
     if not isinstance(p, dict):
@@ -29,11 +26,10 @@ def _normalize_product(p):
 
 def extract_admin_metadata(intermediate_steps):
     products, seen_product_ids = [], set()
-    categories, seen_category_ids = [], set()   # <-- categories bhi list honi chahiye
+    categories, seen_category_ids = [], set()
+    customers, seen_customer_ids = [], set()   # NEW: Added customer tracking lists
 
-    # NEW — Day 4 analytics tools ka output. In sab tools se sirf EK hi
-    # result aata hai ek turn mein (koi bhi ek analytics sawal), isliye
-    # list ki zaroorat nahi — bas jo bhi mila wahi rakh lete hain.
+    # Day 4 analytics tools ka output tracking
     customer_growth = None
     sales_report = None
     revenue_report = None
@@ -57,6 +53,7 @@ def extract_admin_metadata(intermediate_steps):
         if not isinstance(tool_output, dict):
             continue
 
+        # Product extraction
         if isinstance(tool_output.get('products'), list):
             for p in tool_output['products']:
                 _add_product(p)
@@ -69,6 +66,7 @@ def extract_admin_metadata(intermediate_steps):
         if isinstance(tool_output.get('preview'), dict):
             _add_product(tool_output['preview'])
 
+        # Category extraction
         if isinstance(tool_output.get('categories'), list):
             for c in tool_output['categories']:
                 _add_category(c)
@@ -76,7 +74,17 @@ def extract_admin_metadata(intermediate_steps):
         if isinstance(tool_output.get('category'), dict):
             _add_category(tool_output['category'])
 
-        # customer_growth_tool output: {'new_customers', 'by_period', 'retention', 'date_range', ...}
+        # NEW: Customer list extraction (list_customers)
+        if isinstance(tool_output.get('customers'), list):
+            for c in tool_output['customers']:
+                if isinstance(c, dict):
+                    # id ya customer_id dono patterns ko safely check karne k liye
+                    cust_id = c.get('customer_id') or c.get('id')
+                    if cust_id is not None and cust_id not in seen_customer_ids:
+                        seen_customer_ids.add(cust_id)
+                        customers.append(c)
+
+        # customer_growth_tool output
         if 'new_customers' in tool_output:
             customer_growth = {
                 'date_range': tool_output.get('date_range'),
@@ -85,7 +93,7 @@ def extract_admin_metadata(intermediate_steps):
                 'retention': tool_output.get('retention'),
             }
 
-        # sales_report_tool output: {'summary', 'totals', 'date_range', ...}
+        # sales_report_tool output
         if 'totals' in tool_output and 'summary' in tool_output:
             sales_report = {
                 'date_range': tool_output.get('date_range'),
@@ -93,14 +101,14 @@ def extract_admin_metadata(intermediate_steps):
                 'totals': tool_output.get('totals'),
             }
 
-        # revenue_report_tool output: {'revenue_breakdown', 'date_range', ...}
+        # revenue_report_tool output
         if isinstance(tool_output.get('revenue_breakdown'), dict):
             revenue_report = {
                 'date_range': tool_output.get('date_range'),
                 **tool_output['revenue_breakdown'],
             }
 
-        # best_sellers_tool output: {'best_sellers': [...], 'date_range', ...}
+        # best_sellers_tool output
         if isinstance(tool_output.get('best_sellers'), list):
             best_sellers = {
                 'date_range': tool_output.get('date_range'),
@@ -110,6 +118,7 @@ def extract_admin_metadata(intermediate_steps):
     return {
         'products': products,
         'categories': categories,
+        'customers': customers,   # NEW: Added to final return dict
         'customer_growth': customer_growth,
         'sales_report': sales_report,
         'revenue_report': revenue_report,

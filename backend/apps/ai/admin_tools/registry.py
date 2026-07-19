@@ -39,6 +39,7 @@ from apps.ai.admin_tools.analytics_tools import (
     customer_growth_tool as _customer_growth,
 )
 from apps.ai.audit import log_admin_action      # FLOW → apps/ai/audit.py
+from apps.ai.admin_tools.customer_tools import list_customers as _list_customers
 
 EXECUTORS = {
     'create_product':   execute_create_product,
@@ -116,6 +117,16 @@ def get_admin_operations_tools(session_key: str, user):
         if limit is None:
             limit = 20
         return _list_products(user, category_id, search, limit)
+    
+    @tool
+    def list_customers(search: Optional[str] = None) -> dict:
+        """List store customers with their real customer_id, name, phone,
+        email, total_orders, and total_spent. Use this whenever the admin
+        asks about customers, their order counts, spending, or wants
+        customer-level detail — this gives real IDs and per-customer data,
+        unlike customer_growth which only gives aggregate daily counts.
+        Optionally filter by a search keyword (name/phone/email)."""
+        return _list_customers(user, search)
 
     @tool
     def check_inventory(product_id: int) -> dict:
@@ -193,7 +204,7 @@ def get_admin_operations_tools(session_key: str, user):
     return [
         create_product, update_product, delete_product,
         create_category, update_category, delete_category, get_categories,
-        list_products,
+        list_products, list_customers,
         check_inventory, update_inventory, low_stock,
         get_order_details, update_order, cancel_order, track_order,
         confirm_pending_action,
